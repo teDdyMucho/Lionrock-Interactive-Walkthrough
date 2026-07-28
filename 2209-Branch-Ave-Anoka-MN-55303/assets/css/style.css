@@ -68,6 +68,9 @@ a{ color:inherit; text-decoration:none; }
   width:auto;
   display:block;
 }
+#header-right{
+  display:flex; align-items:center; gap:40px;
+}
 #room-nav{
   display:flex; gap:34px;
 }
@@ -199,14 +202,14 @@ a{ color:inherit; text-decoration:none; }
   border-color:var(--paper);
 }
 
-/* ---------- Back to gallery ---------- */
+/* ---------- Back to gallery: sits in the header row, right of the nav ---------- */
 #back-to-gallery{
-  position:fixed; top:26px; right:48px; z-index:100;
   font-family:'Playfair Display',serif;
   font-size:.85rem;
   letter-spacing:.04em;
   opacity:.75;
   transition:opacity .2s ease;
+  white-space:nowrap;
 }
 #back-to-gallery:hover{ opacity:1; }
 
@@ -275,5 +278,5 @@ a{ color:inherit; text-decoration:none; }
   .dot-row .dot-label{ font-size:.75rem; }
   #footer-overlay{ right:20px; bottom:14px; max-width:220px; }
   #footer-note{ font-size:.65rem; }
-  #back-to-gallery{ top:16px; right:20px; font-size:.75rem; }
+  #back-to-gallery{ font-size:.75rem; }
 }

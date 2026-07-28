@@ -5,14 +5,20 @@
   // scroll/swipe adds an impulse to a velocity, which decays every frame under
   // FRICTION. That's what gives the "plays a few frames at speed, then eases to
   // a stop" glide instead of a hard cut whenever the input stops.
-  const SCRUB_SENSITIVITY = 0.00032;  // velocity impulse per wheel delta unit
-  const TOUCH_SENSITIVITY = 0.0009;   // velocity impulse per pixel of touch swipe
-  const FRICTION = 0.9;               // per-frame velocity decay (0-1, higher = glides longer)
-  const MAX_VELOCITY = 0.15;          // clamp on seconds-of-video moved per frame
-  const VELOCITY_EPSILON = 0.0004;    // velocity below this is treated as stopped
-  const GLIDE_EASE = 0.12;            // how quickly a nav/dot jump eases into its target
-  const GLIDE_EPSILON = 0.01;         // seconds - how close counts as "arrived" for a glide
-  const FETCH_TIMEOUT = 20000;        // ms before the loader gives up waiting on a slow download
+  // Touch/coarse-pointer devices (phones) get gentler motion and a bigger seek
+  // dead-zone than desktop - mobile decoders are slower, so fewer/smaller seeks
+  // per second matters more for smoothness there than it does on a desktop GPU.
+  const IS_TOUCH_DEVICE = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+
+  const SCRUB_SENSITIVITY = 0.00032;              // velocity impulse per wheel delta unit
+  const TOUCH_SENSITIVITY = 0.0009;               // velocity impulse per pixel of touch swipe
+  const FRICTION = 0.9;                           // per-frame velocity decay (0-1, higher = glides longer)
+  const MAX_VELOCITY = IS_TOUCH_DEVICE ? 0.08 : 0.15; // clamp on seconds-of-video moved per frame
+  const VELOCITY_EPSILON = 0.0004;                // velocity below this is treated as stopped
+  const SEEK_THRESHOLD = IS_TOUCH_DEVICE ? 0.05 : 0.02; // seconds of drift before bothering to re-seek
+  const GLIDE_EASE = 0.12;                        // how quickly a nav/dot jump eases into its target
+  const GLIDE_EPSILON = 0.01;                     // seconds - how close counts as "arrived" for a glide
+  const FETCH_TIMEOUT = 20000;                    // ms before the loader gives up waiting on a slow download
 
   const els = {
     loader: document.getElementById('loader'),
@@ -331,22 +337,42 @@
     addImpulse(e.deltaY * SCRUB_SENSITIVITY);
   }
 
+  let touchLastX = null;
   let touchLastY = null;
 
+  // The forced-landscape CSS rotates the whole page 90deg, but touch events still
+  // report raw physical screen coordinates - they know nothing about that CSS
+  // transform. So while rotated, a visual "swipe up" is a physical swipe to the
+  // right, not up. Checked live (not cached) since the device can flip orientation
+  // mid-session.
+  function isForcedLandscape() {
+    return window.matchMedia('(max-width:900px) and (orientation:portrait)').matches;
+  }
+
   function onTouchStart(e) {
+    touchLastX = e.touches[0].clientX;
     touchLastY = e.touches[0].clientY;
   }
 
   function onTouchMove(e) {
     if (!scrubEngineActive || !totalDuration || touchLastY === null) return;
     e.preventDefault();
+    const x = e.touches[0].clientX;
     const y = e.touches[0].clientY;
-    const deltaY = touchLastY - y; // swipe up (finger moves up) = forward, matching wheel-down = forward
+
+    // swipe "up"/"down" as the user visually perceives them = forward/backward,
+    // matching wheel-down = forward
+    const delta = isForcedLandscape()
+      ? x - touchLastX   // rotated 90deg: physical rightward swipe = visual "up"
+      : touchLastY - y;  // unrotated: physical upward swipe = visual "up"
+
+    touchLastX = x;
     touchLastY = y;
-    addImpulse(deltaY * TOUCH_SENSITIVITY);
+    addImpulse(delta * TOUCH_SENSITIVITY);
   }
 
   function onTouchEnd() {
+    touchLastX = null;
     touchLastY = null;
   }
 
@@ -386,7 +412,7 @@
         const video = slots[activeSlot].el;
         // skip while a previous seek is still resolving - firing a new one before the
         // decoder catches up is what made playback look choppy/low-framerate
-        if (!video.seeking && video.readyState >= 1 && Math.abs(video.currentTime - localTime) > 0.02) {
+        if (!video.seeking && video.readyState >= 1 && Math.abs(video.currentTime - localTime) > SEEK_THRESHOLD) {
           video.currentTime = localTime;
         }
       }
