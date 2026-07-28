@@ -44,7 +44,7 @@
     const data = await fetch('content/rooms.json', { cache: 'no-store' }).then(r => r.json());
 
     applyPropertyChrome(data.property);
-    buildRoomsMeta(data.rooms);
+    buildRoomsMeta(data.property, data.rooms);
     wireNav();
     wireDotNav();
 
@@ -63,20 +63,36 @@
     }
   }
 
-  function buildRoomsMeta(roomDefs) {
+  function buildRoomsMeta(property, roomDefs) {
     const usedSlugs = new Set();
-    rooms = roomDefs.map((def) => ({
+    const named = roomDefs.map((def) => ({
       id: uniqueSlug(def.label, usedSlugs),
       label: def.label,
       video: def.video,
       duration: 0,
       cumStart: 0,
       blobUrl: null,
+      hidden: false,
     }));
+
+    // the intro plays first and is where the loop lands after the last room -
+    // it isn't a nav-jumpable "room" so it gets no nav link / dot
+    const intro = property.introVideo ? [{
+      id: 'intro',
+      label: 'Intro',
+      video: property.introVideo,
+      duration: 0,
+      cumStart: 0,
+      blobUrl: null,
+      hidden: true,
+    }] : [];
+
+    rooms = [...intro, ...named];
   }
 
   function wireNav() {
     rooms.forEach((room, i) => {
+      if (room.hidden) return;
       const a = document.createElement('a');
       a.href = '#';
       a.textContent = room.label;
@@ -91,6 +107,7 @@
 
   function wireDotNav() {
     rooms.forEach((room, i) => {
+      if (room.hidden) return;
       const row = document.createElement('div');
       row.className = 'dot-row';
 
@@ -118,6 +135,7 @@
   function highlightActive(index) {
     rooms.forEach((room, i) => {
       room.navLink?.classList.toggle('active', i === index);
+      if (!room.dotRow) return;
       room.dotRow.classList.remove('active', 'label-above', 'label-below');
       room.dotRow.classList.add(i === index ? 'active' : i < index ? 'label-above' : 'label-below');
     });
@@ -273,7 +291,18 @@
   function onWheel(e) {
     if (!scrubEngineActive || !totalDuration) return;
     e.preventDefault();
-    globalTarget = clamp(globalTarget + e.deltaY * SCRUB_SENSITIVITY, 0, totalDuration);
+
+    let next = globalTarget + e.deltaY * SCRUB_SENSITIVITY;
+
+    if (next >= totalDuration) {
+      // scrolled past the end - loop back around to the intro instead of stopping
+      next %= totalDuration;
+      globalCurrent = next; // hard cut so we don't visibly rewind through the whole timeline to get there
+    } else if (next < 0) {
+      next = 0;
+    }
+
+    globalTarget = next;
   }
 
   function easeLoop() {
@@ -286,7 +315,9 @@
         switchToRoom(index, localTime);
       } else {
         const video = slots[activeSlot].el;
-        if (video.readyState >= 1 && Math.abs(video.currentTime - localTime) > 0.015) {
+        // skip while a previous seek is still resolving - firing a new one before the
+        // decoder catches up is what made playback look choppy/low-framerate
+        if (!video.seeking && video.readyState >= 1 && Math.abs(video.currentTime - localTime) > 0.02) {
           video.currentTime = localTime;
         }
       }
