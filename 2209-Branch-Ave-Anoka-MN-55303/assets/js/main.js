@@ -297,14 +297,24 @@
     standby.el.addEventListener('loadedmetadata', () => { standby.ready = true; }, { once: true });
   }
 
+  // A fast glide (nav/dot click) can cross several room boundaries within one
+  // video's load time, calling switchToRoom again before an earlier call's
+  // "loadedmetadata" has fired. That listener stays attached and still fires
+  // later against whatever src is *actually* loaded by then - without this
+  // token guard, its stale index/localTime would land the swap on the wrong
+  // spot. Only the most recent request's callback is allowed to apply itself.
+  let swapToken = 0;
+
   function switchToRoom(index, localTime) {
     lastDirection = index > activeIndex ? 1 : -1;
     activeIndex = index;
 
     const standbyIdx = 1 - activeSlot;
     const standby = slots[standbyIdx];
+    const myToken = ++swapToken;
 
     const finishSwap = () => {
+      if (myToken !== swapToken) return; // superseded by a later switchToRoom call
       standby.el.currentTime = localTime;
       slots[activeSlot].el.pause();
       slots[activeSlot].el.classList.remove('active');
