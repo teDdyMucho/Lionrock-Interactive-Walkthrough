@@ -18,7 +18,6 @@ html,body{
 }
 
 html{
-  scroll-snap-type:y proximity;
   scroll-behavior:smooth;
 }
 
@@ -104,35 +103,48 @@ a{ color:inherit; text-decoration:none; }
   transform:scale(1.35);
 }
 
-/* ---------- Sections ---------- */
-#rooms-container{ position:relative; }
+/* ---------- Stage (single pinned video, continuous timeline) ---------- */
 
-.room-section{
+/* the wrapper is slightly taller than the viewport so the sticky stage has a small
+   runway to release through once the whole sequence ends, revealing the footer */
+#stage-wrapper{
   position:relative;
+  height:calc(100vh + 160px);
+}
+
+#stage{
+  position:sticky;
+  top:0;
   height:100vh;
   width:100%;
   overflow:hidden;
-  scroll-snap-align:start;
-  scroll-snap-stop:always;
 }
 
-.room-section video{
+#stage video{
   position:absolute; inset:0;
   width:100%; height:100%;
   object-fit:cover;
+  opacity:0;
+  z-index:0;
 }
 
-.room-section::after{
+#stage video.active{
+  opacity:1;
+  z-index:1;
+}
+
+#stage::after{
   content:'';
   position:absolute; inset:0;
   background:linear-gradient(to top, rgba(0,0,0,.75) 0%, rgba(0,0,0,.05) 40%, rgba(0,0,0,.35) 100%);
   pointer-events:none;
+  z-index:2;
 }
 
 .room-label{
   position:absolute;
   right:52px; top:50%; transform:translateY(-50%);
-  z-index:2;
+  z-index:3;
   font-family:'Playfair Display',serif;
   font-size:1.1rem;
   letter-spacing:.06em;
@@ -140,9 +152,11 @@ a{ color:inherit; text-decoration:none; }
 }
 
 .room-hero{
-  position:absolute; left:48px; bottom:64px; z-index:2;
+  position:absolute; left:48px; bottom:64px; z-index:3;
   max-width:640px;
+  transition:opacity .3s ease;
 }
+.room-hero.hidden{ opacity:0; pointer-events:none; }
 .room-hero .eyebrow{
   font-size:.85rem; letter-spacing:.08em; opacity:.85; margin-bottom:6px;
 }

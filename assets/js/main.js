@@ -2,25 +2,47 @@
   'use strict';
 
   const SCRUB_SENSITIVITY = 0.0026;   // seconds of video per wheel delta unit
-  const EASE_FACTOR = 0.12;           // how quickly currentTime eases toward the target (0-1)
-  const READY_TIMEOUT = 15000;        // ms before the loader gives up waiting on a slow video
-  const EDGE_RELEASE = 0.05;          // seconds of slack at 0/duration before handing scroll back to the page
+  const EASE_FACTOR = 0.15;           // how quickly the timeline eases toward the target (0-1)
+  const EDGE_RELEASE = 0.05;          // seconds of slack at 0/totalDuration before handing scroll back to the page
+  const FETCH_TIMEOUT = 20000;        // ms before the loader gives up waiting on a slow download
 
   const els = {
     loader: document.getElementById('loader'),
     loaderVideo: document.getElementById('loader-video'),
     loaderFill: document.getElementById('loader-bar-fill'),
     loaderLabel: document.getElementById('loader-label'),
-    header: document.getElementById('site-header'),
     brandLink: document.getElementById('brand-link'),
     nav: document.getElementById('room-nav'),
     dotNav: document.getElementById('dot-nav'),
-    container: document.getElementById('rooms-container'),
+    stageWrapper: document.getElementById('stage-wrapper'),
+    stage: document.getElementById('stage'),
+    videoA: document.getElementById('video-a'),
+    videoB: document.getElementById('video-b'),
+    stageLabel: document.getElementById('stage-room-label'),
+    hero: document.getElementById('stage-hero'),
+    heroEyebrow: document.getElementById('hero-eyebrow'),
+    heroTitle: document.getElementById('hero-title'),
+    heroAddress: document.getElementById('hero-address'),
     footerNote: document.getElementById('footer-note'),
   };
 
-  let rooms = [];          // render state per room: { id, label, el, video, duration, target, current, navLink, dot }
-  let currentIndex = 0;
+  // rooms: [{ id, label, video, duration, cumStart, blobUrl }]
+  let rooms = [];
+  let totalDuration = 0;
+
+  let globalTarget = 0;   // seconds along the whole concatenated timeline
+  let globalCurrent = 0;  // eased position
+  let activeIndex = 0;    // which room is currently on screen
+  let lastDirection = 1;
+
+  // two video elements ping-pong as the "visible" / "standby" slot so swapping
+  // rooms never has to wait on a fresh network load
+  const slots = [
+    { el: els.videoA, roomIndex: -1, ready: false },
+    { el: els.videoB, roomIndex: -1, ready: false },
+  ];
+  let activeSlot = 0;
+
   let scrubEngineActive = false;
 
   init();
@@ -29,12 +51,12 @@
     const data = await fetch('content/rooms.json', { cache: 'no-store' }).then(r => r.json());
 
     applyPropertyChrome(data.property);
-    renderRooms(data.property, data.rooms);
+    buildRoomsMeta(data.rooms);
     wireNav();
     wireDotNav();
-    observeActiveSection();
 
     await preloadAll();
+    setupInitialStage();
     startScrubEngine();
     revealSite();
   }
@@ -42,65 +64,31 @@
   function applyPropertyChrome(property) {
     if (property.logoLink) els.brandLink.href = property.logoLink;
     els.footerNote.textContent = property.footerNote || '';
+    els.heroEyebrow.textContent = property.eyebrow || 'Virtual Walkthrough';
+    els.heroTitle.textContent = property.title || '';
+    els.heroAddress.textContent = property.address || '';
     if (property.introVideo) {
       els.loaderVideo.src = property.introVideo;
       els.loaderVideo.play().catch(() => {});
     }
   }
 
-  function renderRooms(property, roomDefs) {
+  function buildRoomsMeta(roomDefs) {
     const usedSlugs = new Set();
-
-    roomDefs.forEach((def, i) => {
-      const id = uniqueSlug(def.label, usedSlugs);
-
-      const section = document.createElement('section');
-      section.className = 'room-section';
-      section.id = `room-${id}`;
-      section.dataset.index = String(i);
-
-      const video = document.createElement('video');
-      video.src = def.video;
-      video.muted = true;
-      video.playsInline = true;
-      video.preload = 'auto';
-
-      const label = document.createElement('div');
-      label.className = 'room-label';
-      label.textContent = def.label;
-
-      section.appendChild(video);
-      section.appendChild(label);
-
-      if (i === 0) {
-        const hero = document.createElement('div');
-        hero.className = 'room-hero';
-        hero.innerHTML = `
-          <div class="eyebrow">${escapeHtml(property.eyebrow || 'Virtual Walkthrough')}</div>
-          <h1>${escapeHtml(property.title || '')}</h1>
-          <div class="address">${escapeHtml(property.address || '')}</div>
-        `;
-        section.appendChild(hero);
-      }
-
-      els.container.appendChild(section);
-
-      rooms.push({
-        id,
-        label: def.label,
-        el: section,
-        video,
-        duration: 0,
-        target: 0,
-        current: 0,
-      });
-    });
+    rooms = roomDefs.map((def) => ({
+      id: uniqueSlug(def.label, usedSlugs),
+      label: def.label,
+      video: def.video,
+      duration: 0,
+      cumStart: 0,
+      blobUrl: null,
+    }));
   }
 
   function wireNav() {
     rooms.forEach((room, i) => {
       const a = document.createElement('a');
-      a.href = `#room-${room.id}`;
+      a.href = `#${room.id}`;
       a.textContent = room.label;
       a.addEventListener('click', (e) => {
         e.preventDefault();
@@ -123,81 +111,149 @@
     });
   }
 
-  function jumpToRoom(index, atEnd = false) {
-    const room = rooms[index];
-    room.el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    room.target = atEnd ? room.duration : 0;
-    room.current = room.target;
-    if (room.video.readyState >= 1) room.video.currentTime = room.target;
+  function jumpToRoom(index) {
+    if (window.scrollY > 0) window.scrollTo({ top: 0, behavior: 'smooth' });
+    globalTarget = clamp(rooms[index].cumStart + 0.05, 0, totalDuration);
   }
 
-  function setActive(index) {
-    if (index === currentIndex && rooms[index]?.navLink?.classList.contains('active')) return;
-    currentIndex = index;
+  function highlightActive(index) {
     rooms.forEach((room, i) => {
       room.navLink?.classList.toggle('active', i === index);
       room.dot?.classList.toggle('active', i === index);
     });
+    els.stageLabel.textContent = rooms[index].label;
+    els.hero.classList.toggle('hidden', index !== 0);
   }
 
-  function observeActiveSection() {
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
-          const idx = Number(entry.target.dataset.index);
-          setActive(idx);
-        }
-      });
-    }, { threshold: [0.5] });
+  // ---------- Cache loader (downloads every clip up front so scrubbing never stalls) ----------
 
-    rooms.forEach((room) => observer.observe(room.el));
-  }
-
-  // ---------- Cache loader ----------
-
-  function preloadAll() {
+  async function preloadAll() {
     const total = rooms.length;
-    const progressByRoom = rooms.map(() => 0);
+    const progress = rooms.map(() => 0);
 
     const updateProgress = () => {
-      const avg = progressByRoom.reduce((a, b) => a + b, 0) / total;
+      const avg = progress.reduce((a, b) => a + b, 0) / total;
       const pct = Math.round(avg * 100);
       els.loaderFill.style.width = `${pct}%`;
       els.loaderLabel.textContent = `Loading walkthrough… ${pct}%`;
     };
 
-    const waitFor = (room, i) => new Promise((resolve) => {
-      const { video } = room;
-      let settled = false;
-
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        room.duration = video.duration || 0;
-        room.target = 0;
-        room.current = 0;
-        progressByRoom[i] = 1;
+    const blobs = await Promise.all(
+      rooms.map((room, i) => fetchBlobWithProgress(room.video, (p) => {
+        progress[i] = p;
         updateProgress();
-        // force the browser to decode/render the first frame so the initial seek is instant
-        video.play().then(() => video.pause()).catch(() => {});
-        resolve();
-      };
+      }))
+    );
 
-      video.addEventListener('canplaythrough', finish, { once: true });
-      video.addEventListener('progress', () => {
-        if (video.buffered.length && video.duration) {
-          const buffered = video.buffered.end(video.buffered.length - 1);
-          progressByRoom[i] = Math.min(1, buffered / video.duration) * 0.95;
-          updateProgress();
-        }
+    rooms.forEach((room, i) => { room.blobUrl = blobs[i]; });
+
+    // read each clip's duration once via a single throwaway <video> probe
+    const probe = document.createElement('video');
+    probe.muted = true;
+    probe.playsInline = true;
+    for (const room of rooms) {
+      await new Promise((resolve) => {
+        const done = () => resolve();
+        probe.addEventListener('loadedmetadata', () => {
+          room.duration = probe.duration || 0;
+          done();
+        }, { once: true });
+        probe.addEventListener('error', done, { once: true });
+        probe.src = room.blobUrl;
+        probe.load();
       });
-      video.addEventListener('error', finish, { once: true });
-      setTimeout(finish, READY_TIMEOUT);
+    }
 
-      video.load();
-    });
+    let acc = 0;
+    rooms.forEach((room) => { room.cumStart = acc; acc += room.duration; });
+    totalDuration = acc;
+  }
 
-    return Promise.all(rooms.map(waitFor));
+  function fetchBlobWithProgress(url, onProgress) {
+    return Promise.race([
+      fetch(url).then(async (response) => {
+        const contentLength = Number(response.headers.get('Content-Length')) || 0;
+        if (!response.body || !contentLength) {
+          const blob = await response.blob();
+          onProgress(1);
+          return URL.createObjectURL(blob);
+        }
+        const reader = response.body.getReader();
+        const chunks = [];
+        let received = 0;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          received += value.length;
+          onProgress(Math.min(1, received / contentLength));
+        }
+        return URL.createObjectURL(new Blob(chunks));
+      }),
+      new Promise((resolve) => setTimeout(() => { onProgress(1); resolve(null); }, FETCH_TIMEOUT)),
+    ]);
+  }
+
+  // ---------- Stage: two ping-ponging <video> elements ----------
+
+  function setupInitialStage() {
+    const first = slots[0];
+    first.roomIndex = 0;
+    first.el.src = rooms[0].blobUrl;
+    first.el.load();
+    first.el.classList.add('active');
+    activeSlot = 0;
+    activeIndex = 0;
+    highlightActive(0);
+    prewarmNeighbor();
+  }
+
+  function prewarmNeighbor() {
+    const targetIndex = activeIndex + lastDirection;
+    if (targetIndex < 0 || targetIndex >= rooms.length) return;
+    const standby = slots[1 - activeSlot];
+    if (standby.roomIndex === targetIndex) return;
+    standby.roomIndex = targetIndex;
+    standby.ready = false;
+    standby.el.src = rooms[targetIndex].blobUrl;
+    standby.el.load();
+    standby.el.addEventListener('loadedmetadata', () => { standby.ready = true; }, { once: true });
+  }
+
+  function switchToRoom(index, localTime) {
+    lastDirection = index > activeIndex ? 1 : -1;
+    activeIndex = index;
+
+    const standbyIdx = 1 - activeSlot;
+    const standby = slots[standbyIdx];
+
+    const finishSwap = () => {
+      standby.el.currentTime = localTime;
+      slots[activeSlot].el.classList.remove('active');
+      standby.el.classList.add('active');
+      activeSlot = standbyIdx;
+      highlightActive(index);
+      prewarmNeighbor();
+    };
+
+    if (standby.roomIndex === index) {
+      finishSwap();
+    } else {
+      standby.roomIndex = index;
+      standby.el.src = rooms[index].blobUrl;
+      standby.el.load();
+      standby.el.addEventListener('loadedmetadata', finishSwap, { once: true });
+    }
+  }
+
+  function locate(t) {
+    for (let i = 0; i < rooms.length; i++) {
+      const room = rooms[i];
+      if (t < room.cumStart + room.duration || i === rooms.length - 1) {
+        return { index: i, localTime: clamp(t - room.cumStart, 0, room.duration) };
+      }
+    }
+    return { index: 0, localTime: 0 };
   }
 
   function revealSite() {
@@ -217,57 +273,40 @@
   }
 
   function onWheel(e) {
-    if (!scrubEngineActive) return;
-    const room = rooms[currentIndex];
-    if (!room || !room.duration) return;
+    if (!scrubEngineActive || !totalDuration) return;
 
-    // only scroll-jack while the active room's section actually fills the viewport
-    // (e.g. not while the footer below the last room has scrolled into view)
-    const rect = room.el.getBoundingClientRect();
+    // only scroll-jack while the stage is actually pinned across the full viewport
+    // (releases naturally once the sequence ends and the footer scrolls into view)
+    const rect = els.stage.getBoundingClientRect();
     if (rect.top > 1 || rect.bottom < window.innerHeight - 1) return;
 
     const goingForward = e.deltaY > 0;
-    const atStart = room.target <= EDGE_RELEASE;
-    const atEnd = room.target >= room.duration - EDGE_RELEASE;
+    const atStart = globalTarget <= EDGE_RELEASE;
+    const atEnd = globalTarget >= totalDuration - EDGE_RELEASE;
 
-    // let the page scroll naturally once this clip is exhausted: forward always releases
-    // (so the last room can scroll on into the footer), backward only releases if there's
-    // an earlier room to land on
-    if ((goingForward && atEnd) ||
-        (!goingForward && atStart && currentIndex > 0)) {
-      return;
-    }
+    if ((goingForward && atEnd) || (!goingForward && atStart)) return;
 
     e.preventDefault();
-    room.target = clamp(room.target + e.deltaY * SCRUB_SENSITIVITY, 0, room.duration);
+    globalTarget = clamp(globalTarget + e.deltaY * SCRUB_SENSITIVITY, 0, totalDuration);
   }
 
   function easeLoop() {
-    const room = rooms[currentIndex];
-    if (room && room.duration) {
-      room.current += (room.target - room.current) * EASE_FACTOR;
-      if (Math.abs(room.target - room.current) < 0.01) room.current = room.target;
-      if (room.video.readyState >= 1 && Math.abs(room.video.currentTime - room.current) > 0.015) {
-        room.video.currentTime = room.current;
+    if (totalDuration) {
+      globalCurrent += (globalTarget - globalCurrent) * EASE_FACTOR;
+      if (Math.abs(globalTarget - globalCurrent) < 0.01) globalCurrent = globalTarget;
+
+      const { index, localTime } = locate(globalCurrent);
+      if (index !== activeIndex) {
+        switchToRoom(index, localTime);
+      } else {
+        const video = slots[activeSlot].el;
+        if (video.readyState >= 1 && Math.abs(video.currentTime - localTime) > 0.015) {
+          video.currentTime = localTime;
+        }
       }
     }
     requestAnimationFrame(easeLoop);
   }
-
-  // when the page scroll naturally lands on a new section (edge release, or manual scrollbar drag),
-  // prime that section's target based on which direction we arrived from
-  let lastKnownIndex = 0;
-  window.addEventListener('scroll', debounce(() => {
-    if (currentIndex === lastKnownIndex) return;
-    const arrivingForward = currentIndex > lastKnownIndex;
-    const room = rooms[currentIndex];
-    if (room) {
-      room.target = arrivingForward ? 0 : room.duration;
-      room.current = room.target;
-      if (room.video.readyState >= 1) room.video.currentTime = room.target;
-    }
-    lastKnownIndex = currentIndex;
-  }, 120), { passive: true });
 
   // ---------- helpers ----------
 
@@ -284,19 +323,5 @@
     while (usedSlugs.has(slug)) slug = `${base}-${n++}`;
     usedSlugs.add(slug);
     return slug;
-  }
-
-  function debounce(fn, ms) {
-    let t;
-    return (...args) => {
-      clearTimeout(t);
-      t = setTimeout(() => fn(...args), ms);
-    };
-  }
-
-  function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
   }
 })();

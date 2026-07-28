@@ -29,8 +29,19 @@
   <!-- Dot navigation -->
   <div id="dot-nav" aria-hidden="true"></div>
 
-  <!-- Scroll-scrub sections -->
-  <main id="rooms-container"></main>
+  <!-- Single pinned video stage: scrolling scrubs one continuous timeline across all rooms -->
+  <div id="stage-wrapper">
+    <main id="stage">
+      <video id="video-a" muted playsinline></video>
+      <video id="video-b" muted playsinline></video>
+      <div class="room-label" id="stage-room-label"></div>
+      <div class="room-hero" id="stage-hero">
+        <div class="eyebrow" id="hero-eyebrow"></div>
+        <h1 id="hero-title"></h1>
+        <div class="address" id="hero-address"></div>
+      </div>
+    </main>
+  </div>
 
   <!-- Footer -->
   <footer id="site-footer">
