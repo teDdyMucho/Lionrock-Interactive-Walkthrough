@@ -20,7 +20,10 @@
   const MAX_BACKWARD_VELOCITY = IS_TOUCH_DEVICE ? 0.03 : 0.05;
   const VELOCITY_EPSILON = 0.0004;                // velocity below this is treated as stopped
   const SEEK_THRESHOLD = IS_TOUCH_DEVICE ? 0.05 : 0.02; // seconds of drift before bothering to re-seek
-  const MIN_PLAYBACK_RATE = 0.05;                 // forward motion: real <video> playback, not seeking
+  // Below this rate, motion is essentially imperceptible - rather than clamping the
+  // rate up to this floor and continuing to "play" a near-frozen video for a long
+  // tail, forward motion just stops outright once decaying velocity would cross it.
+  const MIN_PLAYBACK_RATE = 0.35;                 // forward motion: real <video> playback, not seeking
   const MAX_PLAYBACK_RATE = 3;                    // (there's no such thing as reverse playback, so
                                                    // backward motion still has to seek - see easeLoop)
   const ROOM_END_EPSILON = 0.05;                   // seconds from a clip's end that counts as "arrived"
@@ -432,7 +435,15 @@
   }
 
   function forwardPlayStep() {
-    const rate = clamp(velocity * 60, MIN_PLAYBACK_RATE, MAX_PLAYBACK_RATE);
+    const impliedRate = velocity * 60;
+    if (impliedRate < MIN_PLAYBACK_RATE) {
+      // too slow to look like motion - stop cleanly instead of crawling
+      velocity = 0;
+      pauseActive();
+      return;
+    }
+
+    const rate = clamp(impliedRate, MIN_PLAYBACK_RATE, MAX_PLAYBACK_RATE);
     velocity *= FRICTION;
     if (velocity < VELOCITY_EPSILON) velocity = 0;
 

@@ -268,15 +268,26 @@ a{ color:inherit; text-decoration:none; }
   }
 }
 
-/* ---------- Small landscape screens (phones) ---------- */
-@media screen and (max-width:1000px) and (max-height:520px){
-  #site-header{ padding:14px 22px; }
-  .brand img{ height:22px; }
+/* ---------- Small landscape screens (phones) ----------
+   Matches BOTH a phone truly held in landscape (small width, small height)
+   AND a phone held in portrait that we're force-rotating (the common case) -
+   media queries evaluate the physical, unrotated viewport, so a portrait
+   phone reports its normal tall height even while its content is rotated to
+   look landscape. Missing that second condition here is why these overlays
+   were rendering at full desktop size (and clipping off-screen) on phones
+   held upright. */
+@media screen and (max-width:1000px) and (max-height:520px),
+       screen and (max-width:900px) and (orientation:portrait){
+  #site-header{ padding:12px 18px; }
+  .brand img{ height:18px; }
   #room-nav{ display:none; } /* the dot nav covers navigation on phones */
-  #dot-nav{ right:18px; gap:12px; }
-  .dot-row{ gap:10px; }
-  .dot-row .dot-label{ font-size:.75rem; }
-  #footer-overlay{ right:20px; bottom:14px; max-width:220px; }
-  #footer-note{ font-size:.65rem; }
-  #back-to-gallery{ font-size:.75rem; }
+  #header-right{ gap:16px; }
+  #dot-nav{ right:14px; gap:10px; }
+  .dot-row{ gap:8px; }
+  .dot-row .dot-label{ font-size:.68rem; }
+  .dot-row .dot{ width:5px; height:5px; }
+  .dot-row.active .dot{ width:7px; height:7px; }
+  #footer-overlay{ right:16px; bottom:12px; max-width:170px; }
+  #footer-note{ font-size:.58rem; }
+  #back-to-gallery{ font-size:.68rem; }
 }
