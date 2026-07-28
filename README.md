@@ -131,13 +131,18 @@ are just a shortcut to the two experiences.
 
 - **Scrubbing feel**: motion is velocity/friction based (momentum) - each
   scroll/swipe adds an impulse to a velocity that decays under `FRICTION`
-  each frame, so it glides to a stop rather than cutting instantly. Nav/dot
-  jumps use a separate smooth glide-to-target. `SCRUB_SENSITIVITY`,
-  `TOUCH_SENSITIVITY`, `FRICTION`, and `MAX_VELOCITY` at the top of each
-  project's `assets/js/main.js` control the feel — tune to taste. This uses
-  native `<video>` seeking, not a frame-image sequence; if you use much
-  longer or very high-bitrate source video and scrubbing feels sticky,
-  re-export clips with more frequent keyframes (e.g. `-g 15` in ffmpeg).
+  each frame. Forward motion (velocity > 0) plays the `<video>` for real,
+  with `playbackRate` tied to the decaying velocity, so the browser handles
+  smooth sequential frame decoding instead of repeated seeks - it plays fast,
+  then eases down to a stop. Backward motion has to fall back to seeking
+  `currentTime` every frame, because no browser supports reverse `<video>`
+  playback at all. Nav/dot jumps use a separate smooth glide-to-target
+  (seek-based, since it can go either direction). `SCRUB_SENSITIVITY`,
+  `TOUCH_SENSITIVITY`, `FRICTION`, `MAX_VELOCITY`, `MIN_PLAYBACK_RATE`, and
+  `MAX_PLAYBACK_RATE` at the top of each project's `assets/js/main.js`
+  control the feel — tune to taste. If backward scrubbing still looks choppy,
+  that's the seeking path hitting sparse keyframes; re-export clips with more
+  frequent keyframes (e.g. `-g 15` in ffmpeg) to fix it.
 - **Cache loader**: every room video is downloaded as a Blob up front (with a
   real buffering progress bar) before the site reveals itself, so scrubbing
   never touches the network again for the rest of that page session. A full

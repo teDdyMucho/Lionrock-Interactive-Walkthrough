@@ -16,6 +16,10 @@
   const MAX_VELOCITY = IS_TOUCH_DEVICE ? 0.08 : 0.15; // clamp on seconds-of-video moved per frame
   const VELOCITY_EPSILON = 0.0004;                // velocity below this is treated as stopped
   const SEEK_THRESHOLD = IS_TOUCH_DEVICE ? 0.05 : 0.02; // seconds of drift before bothering to re-seek
+  const MIN_PLAYBACK_RATE = 0.2;                  // forward motion: real <video> playback, not seeking
+  const MAX_PLAYBACK_RATE = 3;                    // (there's no such thing as reverse playback, so
+                                                   // backward motion still has to seek - see easeLoop)
+  const ROOM_END_EPSILON = 0.05;                   // seconds from a clip's end that counts as "arrived"
   const GLIDE_EASE = 0.12;                        // how quickly a nav/dot jump eases into its target
   const GLIDE_EPSILON = 0.01;                     // seconds - how close counts as "arrived" for a glide
   const FETCH_TIMEOUT = 20000;                    // ms before the loader gives up waiting on a slow download
@@ -264,6 +268,7 @@
 
     const finishSwap = () => {
       standby.el.currentTime = localTime;
+      slots[activeSlot].el.pause();
       slots[activeSlot].el.classList.remove('active');
       standby.el.classList.add('active');
       activeSlot = standbyIdx;
@@ -381,40 +386,90 @@
     velocity = clamp(velocity + deltaSeconds, -MAX_VELOCITY, MAX_VELOCITY);
   }
 
+  // Forward motion plays the video for real (browser-decoded sequential frames -
+  // smooth by construction) instead of seeking every frame. Backward motion has
+  // no such option - there's no such thing as reverse <video> playback in any
+  // browser - so it still seeks, same as before.
+
+  function activeVideo() { return slots[activeSlot].el; }
+
+  function pauseActive() {
+    const video = activeVideo();
+    if (!video.paused) video.pause();
+  }
+
+  function seekActiveTo(t) {
+    const { index, localTime } = locate(t);
+    if (index !== activeIndex) {
+      switchToRoom(index, localTime);
+      return;
+    }
+    const video = activeVideo();
+    // skip while a previous seek is still resolving - firing a new one before the
+    // decoder catches up is what made playback look choppy/low-framerate
+    if (!video.seeking && video.readyState >= 1 && Math.abs(video.currentTime - localTime) > SEEK_THRESHOLD) {
+      video.currentTime = localTime;
+    }
+  }
+
+  function refreshGlobalCurrent() {
+    const video = activeVideo();
+    const room = rooms[activeIndex];
+    const t = video.readyState >= 1 ? video.currentTime : 0;
+    globalCurrent = room.cumStart + clamp(t, 0, room.duration);
+  }
+
+  function forwardPlayStep() {
+    const rate = clamp(velocity * 60, MIN_PLAYBACK_RATE, MAX_PLAYBACK_RATE);
+    velocity *= FRICTION;
+    if (velocity < VELOCITY_EPSILON) velocity = 0;
+
+    let video = activeVideo();
+    let room = rooms[activeIndex];
+
+    if (video.paused) video.play().catch(() => {});
+    video.playbackRate = rate;
+
+    if (video.currentTime >= room.duration - ROOM_END_EPSILON || video.ended) {
+      // clip's basically done - hand off to the next room (or loop back to the intro)
+      const nextIndex = (activeIndex + 1) % rooms.length;
+      switchToRoom(nextIndex, 0);
+      video = activeVideo();
+      room = rooms[activeIndex];
+      if (velocity > VELOCITY_EPSILON) {
+        video.play().catch(() => {});
+        video.playbackRate = rate;
+      }
+    }
+  }
+
+  function backwardSeekStep() {
+    pauseActive();
+    let next = globalCurrent + velocity; // velocity is negative here
+    velocity *= FRICTION;
+    if (Math.abs(velocity) < VELOCITY_EPSILON) velocity = 0;
+    if (next < 0) { next = 0; velocity = 0; }
+    globalCurrent = next;
+    seekActiveTo(globalCurrent);
+  }
+
   function easeLoop() {
     if (totalDuration) {
       if (glideTarget !== null) {
+        pauseActive();
         globalCurrent += (glideTarget - globalCurrent) * GLIDE_EASE;
         if (Math.abs(glideTarget - globalCurrent) < GLIDE_EPSILON) {
           globalCurrent = glideTarget;
           glideTarget = null;
         }
-      } else if (Math.abs(velocity) > VELOCITY_EPSILON) {
-        let next = globalCurrent + velocity;
-        velocity *= FRICTION;
-        if (Math.abs(velocity) < VELOCITY_EPSILON) velocity = 0;
-
-        if (next >= totalDuration) {
-          // scrolled/swiped past the end - loop back around to the intro instead of stopping
-          next %= totalDuration;
-          velocity = 0; // hard cut, don't carry momentum through the wrap
-        } else if (next < 0) {
-          next = 0;
-          velocity = 0;
-        }
-        globalCurrent = next;
-      }
-
-      const { index, localTime } = locate(globalCurrent);
-      if (index !== activeIndex) {
-        switchToRoom(index, localTime);
+        seekActiveTo(globalCurrent);
+      } else if (velocity > VELOCITY_EPSILON) {
+        forwardPlayStep();
+        refreshGlobalCurrent();
+      } else if (velocity < -VELOCITY_EPSILON) {
+        backwardSeekStep();
       } else {
-        const video = slots[activeSlot].el;
-        // skip while a previous seek is still resolving - firing a new one before the
-        // decoder catches up is what made playback look choppy/low-framerate
-        if (!video.seeking && video.readyState >= 1 && Math.abs(video.currentTime - localTime) > SEEK_THRESHOLD) {
-          video.currentTime = localTime;
-        }
+        pauseActive();
       }
     }
     requestAnimationFrame(easeLoop);
