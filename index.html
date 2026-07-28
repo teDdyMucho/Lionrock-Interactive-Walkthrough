@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lion Rock — Virtual Walkthrough</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+  <!-- Cache / preload loader -->
+  <div id="loader">
+    <video id="loader-video" muted loop playsinline autoplay></video>
+    <div class="loader-overlay">
+      <div class="loader-brand">Lion Rock</div>
+      <div class="loader-bar-track">
+        <div class="loader-bar-fill" id="loader-bar-fill"></div>
+      </div>
+      <div class="loader-label" id="loader-label">Loading walkthrough… 0%</div>
+    </div>
+  </div>
+
+  <!-- Header / navigation -->
+  <header id="site-header">
+    <a href="https://example.com" id="brand-link" class="brand">Lion Rock</a>
+    <nav id="room-nav" aria-label="Room navigation"></nav>
+  </header>
+
+  <!-- Dot navigation -->
+  <div id="dot-nav" aria-hidden="true"></div>
+
+  <!-- Scroll-scrub sections -->
+  <main id="rooms-container"></main>
+
+  <!-- Footer -->
+  <footer id="site-footer">
+    <p id="footer-note"></p>
+  </footer>
+
+  <!-- Editor / Viewer mode (temporary) -->
+  <div id="mode-switch">
+    <a href="/admin/" id="editor-btn" title="Log in to add or rename rooms">Editor</a>
+    <a href="/" id="viewer-btn" title="Public walkthrough view">Viewer</a>
+  </div>
+
+  <script src="assets/js/main.js"></script>
+
+  <!-- Handles Netlify Identity invite/login links that land on the homepage -->
+  <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+  <script>
+    if (window.netlifyIdentity) {
+      window.netlifyIdentity.on('init', (user) => {
+        if (!user) {
+          window.netlifyIdentity.on('login', () => { document.location.href = '/admin/'; });
+        }
+      });
+    }
+  </script>
+</body>
+</html>
