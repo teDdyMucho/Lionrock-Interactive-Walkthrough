@@ -26,27 +26,19 @@
     <nav id="room-nav" aria-label="Room navigation"></nav>
   </header>
 
-  <!-- Dot navigation -->
+  <!-- Dot navigation: each row is a nav label paired with its bullet -->
   <div id="dot-nav" aria-hidden="true"></div>
 
   <!-- Single pinned video stage: scrolling scrubs one continuous timeline across all rooms -->
-  <div id="stage-wrapper">
-    <main id="stage">
-      <video id="video-a" muted playsinline></video>
-      <video id="video-b" muted playsinline></video>
-      <div class="room-label" id="stage-room-label"></div>
-      <div class="room-hero" id="stage-hero">
-        <div class="eyebrow" id="hero-eyebrow"></div>
-        <h1 id="hero-title"></h1>
-        <div class="address" id="hero-address"></div>
-      </div>
-    </main>
-  </div>
+  <main id="stage">
+    <video id="video-a" muted playsinline></video>
+    <video id="video-b" muted playsinline></video>
+  </main>
 
-  <!-- Footer -->
-  <footer id="site-footer">
+  <!-- Footer text, overlaid over the walkthrough instead of a separate scroll section -->
+  <div id="footer-overlay">
     <p id="footer-note"></p>
-  </footer>
+  </div>
 
   <!-- Editor / Viewer mode (temporary) -->
   <div id="mode-switch">

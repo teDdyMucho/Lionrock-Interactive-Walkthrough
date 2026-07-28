@@ -14,11 +14,7 @@ html,body{
   background:var(--ink);
   color:var(--paper);
   font-family:'Inter',sans-serif;
-  overflow-x:hidden;
-}
-
-html{
-  scroll-behavior:smooth;
+  overflow:hidden;
 }
 
 a{ color:inherit; text-decoration:none; }
@@ -87,36 +83,55 @@ a{ color:inherit; text-decoration:none; }
   border-color:var(--paper);
 }
 
-/* ---------- Dot nav ---------- */
+/* ---------- Dot nav: each row is a label aligned to its own bullet ---------- */
 #dot-nav{
-  position:fixed; right:26px; top:50%; transform:translateY(-50%);
+  position:fixed; right:40px; top:50%; transform:translateY(-50%);
   z-index:90;
-  display:flex; flex-direction:column; gap:14px;
-}
-#dot-nav .dot{
-  width:8px; height:8px; border-radius:50%;
-  background:rgba(245,243,238,.4);
-  transition:background .3s ease, transform .3s ease;
-}
-#dot-nav .dot.active{
-  background:var(--paper);
-  transform:scale(1.35);
+  display:flex; flex-direction:column; align-items:flex-end; gap:22px;
 }
 
-/* ---------- Stage (single pinned video, continuous timeline) ---------- */
-
-/* the wrapper is slightly taller than the viewport so the sticky stage has a small
-   runway to release through once the whole sequence ends, revealing the footer */
-#stage-wrapper{
-  position:relative;
-  height:calc(100vh + 160px);
+.dot-row{
+  display:flex; align-items:center; gap:16px;
 }
 
+.dot-row .dot-label{
+  font-family:'Playfair Display',serif;
+  font-size:.95rem;
+  letter-spacing:.05em;
+  white-space:nowrap;
+  opacity:0;
+  transform:translateY(14px);
+  transition:transform .45s cubic-bezier(.4,0,.2,1), opacity .35s ease;
+  pointer-events:none;
+}
+.dot-row.label-above .dot-label{ transform:translateY(-14px); opacity:0; }
+.dot-row.label-below .dot-label{ transform:translateY(14px); opacity:0; }
+.dot-row.active .dot-label{ transform:translateY(0); opacity:.95; }
+
+.dot-row .dot{
+  appearance:none;
+  -webkit-appearance:none;
+  border:none;
+  padding:0;
+  cursor:pointer;
+  width:6px; height:6px; border-radius:50%;
+  background-color:rgba(245,243,238,.45);
+  transition:background-color .3s ease, width .3s ease, height .3s ease;
+  flex:none;
+}
+.dot-row .dot:hover{ background-color:rgba(245,243,238,.7); }
+.dot-row.active .dot{
+  width:9px; height:9px;
+  background-color:var(--paper);
+}
+.dot-row .dot:focus-visible{
+  outline:2px solid var(--paper);
+  outline-offset:3px;
+}
+
+/* ---------- Stage: single fixed full-viewport video (no page scrolling at all) ---------- */
 #stage{
-  position:sticky;
-  top:0;
-  height:100vh;
-  width:100%;
+  position:fixed; inset:0;
   overflow:hidden;
 }
 
@@ -136,55 +151,24 @@ a{ color:inherit; text-decoration:none; }
 #stage::after{
   content:'';
   position:absolute; inset:0;
-  background:linear-gradient(to top, rgba(0,0,0,.75) 0%, rgba(0,0,0,.05) 40%, rgba(0,0,0,.35) 100%);
+  background:linear-gradient(to top, rgba(0,0,0,.55) 0%, rgba(0,0,0,.02) 35%, rgba(0,0,0,.25) 100%);
   pointer-events:none;
   z-index:2;
 }
 
-.room-label{
-  position:absolute;
-  right:52px; top:50%; transform:translateY(-50%);
-  z-index:3;
-  font-family:'Playfair Display',serif;
-  font-size:1.1rem;
-  letter-spacing:.06em;
-  opacity:.9;
-}
-
-.room-hero{
-  position:absolute; left:48px; bottom:64px; z-index:3;
-  max-width:640px;
-  transition:opacity .3s ease;
-}
-.room-hero.hidden{ opacity:0; pointer-events:none; }
-.room-hero .eyebrow{
-  font-size:.85rem; letter-spacing:.08em; opacity:.85; margin-bottom:6px;
-}
-.room-hero h1{
-  font-family:'Playfair Display',serif;
-  font-size:clamp(3rem,8vw,5.5rem);
-  font-weight:500;
-  line-height:1;
-  margin-bottom:16px;
-}
-.room-hero .address{
-  font-size:.95rem; opacity:.9; max-width:340px; line-height:1.4;
-}
-
-/* ---------- Footer ---------- */
-#site-footer{
-  padding:36px 48px;
-  background:#000;
+/* ---------- Footer text, overlaid bottom-right of the stage ---------- */
+#footer-overlay{
+  position:fixed; right:48px; bottom:32px; z-index:50;
+  max-width:480px;
   text-align:right;
 }
 #footer-note{
   font-family:'Playfair Display',serif;
-  font-size:.95rem;
+  font-size:.85rem;
   font-style:italic;
   opacity:.85;
-  max-width:520px;
-  margin-left:auto;
   line-height:1.5;
+  text-shadow:0 2px 14px rgba(0,0,0,.85);
 }
 
 /* ---------- Editor / Viewer switch ---------- */
@@ -212,9 +196,8 @@ a{ color:inherit; text-decoration:none; }
 @media (max-width:820px){
   #site-header{ padding:16px 20px; flex-direction:column; align-items:flex-start; gap:10px; }
   #room-nav{ gap:16px; overflow-x:auto; max-width:100%; }
-  #dot-nav{ right:14px; }
-  .room-hero{ left:20px; bottom:44px; }
-  .room-label{ right:20px; }
-  #site-footer{ padding:24px 20px; text-align:left; }
-  #footer-note{ margin-left:0; }
+  #dot-nav{ right:16px; gap:16px; }
+  .dot-row .dot-label{ font-size:.8rem; }
+  #footer-overlay{ right:20px; bottom:20px; max-width:260px; }
+  #footer-note{ font-size:.72rem; }
 }

@@ -3,7 +3,6 @@
 
   const SCRUB_SENSITIVITY = 0.0026;   // seconds of video per wheel delta unit
   const EASE_FACTOR = 0.15;           // how quickly the timeline eases toward the target (0-1)
-  const EDGE_RELEASE = 0.05;          // seconds of slack at 0/totalDuration before handing scroll back to the page
   const FETCH_TIMEOUT = 20000;        // ms before the loader gives up waiting on a slow download
 
   const els = {
@@ -14,15 +13,9 @@
     brandLink: document.getElementById('brand-link'),
     nav: document.getElementById('room-nav'),
     dotNav: document.getElementById('dot-nav'),
-    stageWrapper: document.getElementById('stage-wrapper'),
     stage: document.getElementById('stage'),
     videoA: document.getElementById('video-a'),
     videoB: document.getElementById('video-b'),
-    stageLabel: document.getElementById('stage-room-label'),
-    hero: document.getElementById('stage-hero'),
-    heroEyebrow: document.getElementById('hero-eyebrow'),
-    heroTitle: document.getElementById('hero-title'),
-    heroAddress: document.getElementById('hero-address'),
     footerNote: document.getElementById('footer-note'),
   };
 
@@ -64,9 +57,6 @@
   function applyPropertyChrome(property) {
     if (property.logoLink) els.brandLink.href = property.logoLink;
     els.footerNote.textContent = property.footerNote || '';
-    els.heroEyebrow.textContent = property.eyebrow || 'Virtual Walkthrough';
-    els.heroTitle.textContent = property.title || '';
-    els.heroAddress.textContent = property.address || '';
     if (property.introVideo) {
       els.loaderVideo.src = property.introVideo;
       els.loaderVideo.play().catch(() => {});
@@ -88,7 +78,7 @@
   function wireNav() {
     rooms.forEach((room, i) => {
       const a = document.createElement('a');
-      a.href = `#${room.id}`;
+      a.href = '#';
       a.textContent = room.label;
       a.addEventListener('click', (e) => {
         e.preventDefault();
@@ -101,28 +91,36 @@
 
   function wireDotNav() {
     rooms.forEach((room, i) => {
+      const row = document.createElement('div');
+      row.className = 'dot-row';
+
+      const label = document.createElement('span');
+      label.className = 'dot-label';
+      label.textContent = room.label;
+
       const dot = document.createElement('button');
       dot.type = 'button';
       dot.className = 'dot';
       dot.setAttribute('aria-label', room.label);
       dot.addEventListener('click', () => jumpToRoom(i));
-      els.dotNav.appendChild(dot);
-      room.dot = dot;
+
+      row.appendChild(label);
+      row.appendChild(dot);
+      els.dotNav.appendChild(row);
+      room.dotRow = row;
     });
   }
 
   function jumpToRoom(index) {
-    if (window.scrollY > 0) window.scrollTo({ top: 0, behavior: 'smooth' });
     globalTarget = clamp(rooms[index].cumStart + 0.05, 0, totalDuration);
   }
 
   function highlightActive(index) {
     rooms.forEach((room, i) => {
       room.navLink?.classList.toggle('active', i === index);
-      room.dot?.classList.toggle('active', i === index);
+      room.dotRow.classList.remove('active', 'label-above', 'label-below');
+      room.dotRow.classList.add(i === index ? 'active' : i < index ? 'label-above' : 'label-below');
     });
-    els.stageLabel.textContent = rooms[index].label;
-    els.hero.classList.toggle('hidden', index !== 0);
   }
 
   // ---------- Cache loader (downloads every clip up front so scrubbing never stalls) ----------
@@ -274,18 +272,6 @@
 
   function onWheel(e) {
     if (!scrubEngineActive || !totalDuration) return;
-
-    // only scroll-jack while the stage is actually pinned across the full viewport
-    // (releases naturally once the sequence ends and the footer scrolls into view)
-    const rect = els.stage.getBoundingClientRect();
-    if (rect.top > 1 || rect.bottom < window.innerHeight - 1) return;
-
-    const goingForward = e.deltaY > 0;
-    const atStart = globalTarget <= EDGE_RELEASE;
-    const atEnd = globalTarget >= totalDuration - EDGE_RELEASE;
-
-    if ((goingForward && atEnd) || (!goingForward && atStart)) return;
-
     e.preventDefault();
     globalTarget = clamp(globalTarget + e.deltaY * SCRUB_SENSITIVITY, 0, totalDuration);
   }
