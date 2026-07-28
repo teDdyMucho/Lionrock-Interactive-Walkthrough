@@ -1,9 +1,17 @@
 (() => {
   'use strict';
 
-  const SCRUB_SENSITIVITY = 0.0026;   // seconds of video per wheel delta unit
-  const TOUCH_SENSITIVITY = 0.007;    // seconds of video per pixel of touch swipe (swipes are shorter than wheel scrolls)
-  const EASE_FACTOR = 0.15;           // how quickly the timeline eases toward the target (0-1)
+  // Motion is velocity/friction based (momentum), not a fixed target-lerp: each
+  // scroll/swipe adds an impulse to a velocity, which decays every frame under
+  // FRICTION. That's what gives the "plays a few frames at speed, then eases to
+  // a stop" glide instead of a hard cut whenever the input stops.
+  const SCRUB_SENSITIVITY = 0.00032;  // velocity impulse per wheel delta unit
+  const TOUCH_SENSITIVITY = 0.0009;   // velocity impulse per pixel of touch swipe
+  const FRICTION = 0.9;               // per-frame velocity decay (0-1, higher = glides longer)
+  const MAX_VELOCITY = 0.15;          // clamp on seconds-of-video moved per frame
+  const VELOCITY_EPSILON = 0.0004;    // velocity below this is treated as stopped
+  const GLIDE_EASE = 0.12;            // how quickly a nav/dot jump eases into its target
+  const GLIDE_EPSILON = 0.01;         // seconds - how close counts as "arrived" for a glide
   const FETCH_TIMEOUT = 20000;        // ms before the loader gives up waiting on a slow download
 
   const els = {
@@ -24,8 +32,9 @@
   let rooms = [];
   let totalDuration = 0;
 
-  let globalTarget = 0;   // seconds along the whole concatenated timeline
-  let globalCurrent = 0;  // eased position
+  let globalCurrent = 0;  // seconds along the whole concatenated timeline
+  let velocity = 0;       // seconds/frame, decays under FRICTION - drives momentum scrubbing
+  let glideTarget = null; // non-null while easing toward a nav/dot-triggered jump
   let activeIndex = 0;    // which room is currently on screen
   let lastDirection = 1;
 
@@ -130,7 +139,8 @@
   }
 
   function jumpToRoom(index) {
-    globalTarget = clamp(rooms[index].cumStart + 0.05, 0, totalDuration);
+    velocity = 0;
+    glideTarget = clamp(rooms[index].cumStart + 0.05, 0, totalDuration);
   }
 
   function highlightActive(index) {
@@ -296,13 +306,14 @@
   function onWheel(e) {
     if (!scrubEngineActive || !totalDuration) return;
     e.preventDefault();
-    applyScrubDelta(e.deltaY * SCRUB_SENSITIVITY);
+    addImpulse(e.deltaY * SCRUB_SENSITIVITY);
   }
 
   let touchLastY = null;
 
   function onTouchStart(e) {
     touchLastY = e.touches[0].clientY;
+    requestFullscreenOnce();
   }
 
   function onTouchMove(e) {
@@ -311,31 +322,41 @@
     const y = e.touches[0].clientY;
     const deltaY = touchLastY - y; // swipe up (finger moves up) = forward, matching wheel-down = forward
     touchLastY = y;
-    applyScrubDelta(deltaY * TOUCH_SENSITIVITY);
+    addImpulse(deltaY * TOUCH_SENSITIVITY);
   }
 
   function onTouchEnd() {
     touchLastY = null;
   }
 
-  function applyScrubDelta(deltaSeconds) {
-    let next = globalTarget + deltaSeconds;
-
-    if (next >= totalDuration) {
-      // scrolled/swiped past the end - loop back around to the intro instead of stopping
-      next %= totalDuration;
-      globalCurrent = next; // hard cut so we don't visibly rewind through the whole timeline to get there
-    } else if (next < 0) {
-      next = 0;
-    }
-
-    globalTarget = next;
+  function addImpulse(deltaSeconds) {
+    glideTarget = null; // raw input always takes over from a programmatic glide
+    velocity = clamp(velocity + deltaSeconds, -MAX_VELOCITY, MAX_VELOCITY);
   }
 
   function easeLoop() {
     if (totalDuration) {
-      globalCurrent += (globalTarget - globalCurrent) * EASE_FACTOR;
-      if (Math.abs(globalTarget - globalCurrent) < 0.01) globalCurrent = globalTarget;
+      if (glideTarget !== null) {
+        globalCurrent += (glideTarget - globalCurrent) * GLIDE_EASE;
+        if (Math.abs(glideTarget - globalCurrent) < GLIDE_EPSILON) {
+          globalCurrent = glideTarget;
+          glideTarget = null;
+        }
+      } else if (Math.abs(velocity) > VELOCITY_EPSILON) {
+        let next = globalCurrent + velocity;
+        velocity *= FRICTION;
+        if (Math.abs(velocity) < VELOCITY_EPSILON) velocity = 0;
+
+        if (next >= totalDuration) {
+          // scrolled/swiped past the end - loop back around to the intro instead of stopping
+          next %= totalDuration;
+          velocity = 0; // hard cut, don't carry momentum through the wrap
+        } else if (next < 0) {
+          next = 0;
+          velocity = 0;
+        }
+        globalCurrent = next;
+      }
 
       const { index, localTime } = locate(globalCurrent);
       if (index !== activeIndex) {
@@ -350,6 +371,21 @@
       }
     }
     requestAnimationFrame(easeLoop);
+  }
+
+  // Fullscreen hides the mobile browser's address bar; can only be requested from
+  // within a real user gesture, so it's triggered on the first touch. Unsupported
+  // in Safari on iPhone - there, "Add to Home Screen" (see the manifest/meta tags
+  // in index.html) is the only way to get a chrome-less view.
+  let fullscreenRequested = false;
+  function requestFullscreenOnce() {
+    if (fullscreenRequested) return;
+    fullscreenRequested = true;
+    const el = document.documentElement;
+    const request = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (request && !document.fullscreenElement) {
+      request.call(el).catch(() => {});
+    }
   }
 
   // ---------- helpers ----------

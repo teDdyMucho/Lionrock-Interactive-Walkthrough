@@ -15,6 +15,8 @@ html,body{
   color:var(--paper);
   font-family:'Inter',sans-serif;
   overflow:hidden;
+  touch-action:none; /* stop the browser from ever treating a swipe as its own scroll/zoom gesture */
+  overscroll-behavior:none;
 }
 
 a{ color:inherit; text-decoration:none; }
@@ -206,11 +208,11 @@ a{ color:inherit; text-decoration:none; }
 @media screen and (max-width:900px) and (orientation:portrait){
   html{
     position:absolute;
-    top:100%; left:0;
+    top:0; left:100%;
     width:100vh;
     height:100vw;
     transform-origin:left top;
-    transform:rotate(-90deg);
+    transform:rotate(90deg);
     overflow:hidden;
   }
 }
