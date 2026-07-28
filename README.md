@@ -44,15 +44,17 @@ Netlify rebuild and republishes automatically.
 
 ## 1. Preview locally
 
-Any static file server works, e.g. from this folder:
+There's no build step (no bundler, no framework) — this is plain HTML/CSS/JS
+served as-is, so `npm run dev` just starts a static file server:
 
 ```bash
-npx serve .
-# or: python -m http.server 8080
+npm run dev
 ```
 
-Then open the printed localhost URL. (Opening `index.html` directly via
-`file://` won't work — `fetch('content/rooms.json')` requires an http server.)
+Then open http://localhost:5000 in your browser. (Opening `index.html`
+directly via `file://` won't work — `fetch('content/rooms.json')` requires an
+http server. Any static server works if you'd rather not use npm, e.g.
+`python -m http.server 8080`.)
 
 To test the CMS locally before Identity/Git Gateway exist, run this in a
 second terminal, then open `/admin/`:
