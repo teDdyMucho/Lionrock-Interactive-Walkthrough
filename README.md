@@ -1,34 +1,56 @@
-# Lion Rock — Interactive Walkthrough
+# Lion Rock — Portfolio
 
-A scroll-controlled video walkthrough. Mouse-wheel down scrubs the current
-room's video forward, wheel up scrubs it backward (with eased/smoothed
-seeking), and once a clip reaches its start/end the page hands scroll back
-so the visitor glides into the next room. The top nav and the right-side dot
-nav both jump straight to a room.
-
-No build step — it's plain HTML/CSS/JS, so it deploys to Netlify as-is.
+`/` is a gallery of projects. Each project is its own folder with its own
+scroll/swipe-controlled video walkthrough. No build step — it's plain
+HTML/CSS/JS, so it deploys to Netlify as-is.
 
 ## Project structure
 
 ```
-index.html              Page shell (loader, header, footer, mount point for rooms)
-assets/css/style.css    Layout + visual styling
-assets/js/main.js       Cache/preload loader, scroll-scrub engine, nav wiring
-content/rooms.json      All editable content: property info + room list/labels/videos
-videos/2209-branch-ave/ The 7 room clips + intro.mp4 (used as the loader background)
-admin/                  Decap CMS (the "Editor" screen)
+index.html                            Root gallery: grid of project thumbnails
+assets/img/lion-rock-logo.png         Shared brand logo (used by the gallery)
+
+2209-Branch-Ave-Anoka-MN-55303/       One project ("Unit 9")
+  index.html                          Page shell (loader, header, footer, stage)
+  assets/css/style.css                Layout + visual styling
+  assets/js/main.js                   Cache/preload loader, scrub engine, nav wiring
+  content/rooms.json                  Editable content: property info + room list/labels/videos
+  videos/2209-branch-ave/             The 7 room clips + intro.mp4 (loader background)
+
+admin/                                Decap CMS (the "Editor" screen) - shared across all projects
 ```
 
-`main.js` renders the header nav, the dot nav, and every room section straight
-from `content/rooms.json` — nothing about rooms is hardcoded in `index.html`.
-That's what lets the Editor add/rename/reorder rooms without touching code.
+Each project's HTML/JS references its own assets with absolute paths prefixed
+by its folder name (e.g. `/2209-Branch-Ave-Anoka-MN-55303/assets/js/main.js`)
+rather than relative paths — that avoids a trailing-slash edge case where a
+static host can resolve `folder/index.html`'s relative URLs against `/folder`
+instead of `/folder/`.
+
+`main.js` renders the header nav, the dot nav, and every room straight from
+that project's `content/rooms.json` — nothing about rooms is hardcoded in
+`index.html`. That's what lets the Editor add/rename/reorder rooms without
+touching code.
+
+## Adding another project
+
+1. Copy the `2209-Branch-Ave-Anoka-MN-55303/` folder, rename it to the new
+   project's slug (e.g. `123-Main-St/`).
+2. Find-and-replace the old folder name with the new one across the copied
+   `index.html`, `assets/js/main.js`, and `content/rooms.json` (they all
+   reference the absolute path).
+3. Add a matching `files:` entry for it in `admin/config.yml` (copy the
+   existing `unit9` entry and repoint `file`/`media_folder`/`public_folder`).
+4. Add a matching pair of `[[headers]]` blocks in `netlify.toml` for its
+   `videos/*` and `content/*` paths.
+5. Add a card for it in the root `index.html` gallery grid.
 
 ## Editor vs. Viewer
 
-The two pill buttons in the bottom-left corner are the temporary role switch:
+The two pill buttons in the bottom-left corner of a project page (invisible
+until hovered) are the temporary role switch:
 
-- **Viewer** — just the public site (`/`). Anyone can scroll/scrub/jump nav. No
-  edit capability at all.
+- **Viewer** — the public walkthrough. Anyone can scroll/scrub/jump nav. No
+  edit capability at all. Hidden entirely on mobile — phones are viewer-only.
 - **Editor** — opens `/admin/`, a Decap CMS screen. Logging in there is
   gated by Netlify Identity (see setup below), so only invited editors can
   get in. From that screen an editor can:
@@ -38,9 +60,9 @@ The two pill buttons in the bottom-left corner are the temporary role switch:
   - Replace a room's video
   - Edit the property title/address/footer text and the logo link
 
-Saving in the CMS commits straight to `content/rooms.json` (and uploads new
-videos into `videos/2209-branch-ave/`) on the `main` branch, which triggers a
-Netlify rebuild and republishes automatically.
+Saving in the CMS commits straight to that project's `content/rooms.json`
+(and uploads new videos into its `videos/` folder) on the `main` branch,
+which triggers a Netlify rebuild and republishes automatically.
 
 ## 1. Preview locally
 
@@ -51,9 +73,10 @@ served as-is, so `npm run dev` just starts a static file server:
 npm run dev
 ```
 
-Then open http://localhost:5000 in your browser. (Opening `index.html`
-directly via `file://` won't work — `fetch('content/rooms.json')` requires an
-http server. Any static server works if you'd rather not use npm, e.g.
+Then open http://localhost:5000 in your browser (the gallery), and click
+through to a project. (Opening `index.html` directly via `file://` won't
+work — the project pages `fetch()` their `content/rooms.json`, which requires
+an http server. Any static server works if you'd rather not use npm, e.g.
 `python -m http.server 8080`.)
 
 To test the CMS locally before Identity/Git Gateway exist, run this in a
@@ -106,18 +129,25 @@ are just a shortcut to the two experiences.
 
 ## Notes / things to know
 
-- **Scrubbing feel**: this uses native `<video>` seeking eased via
-  `requestAnimationFrame`, not a frame-image sequence. It's smooth for these
-  short clips; if you use much longer or very high-bitrate source video later
-  and scrubbing feels sticky, re-export clips with more frequent keyframes
-  (e.g. `-g 15` in ffmpeg). `SCRUB_SENSITIVITY` and `EASE_FACTOR` at the top
-  of `assets/js/main.js` control how far one scroll tick moves the video and
-  how "floaty" the easing feels — tune those to taste.
-- **Cache loader**: all room videos are preloaded (with a real buffering
-  progress bar) before the site reveals itself, so the first scrub never
-  stalls waiting on the network.
-- **Adding another property later**: duplicate the `videos/<slug>/` folder
-  and either point `content/rooms.json` at the new clips, or (cleaner, if you
-  want multiple properties live at once) copy this whole project per
-  property/subdomain — ask and I can wire up a proper multi-property picker
-  instead.
+- **Scrubbing feel**: motion is velocity/friction based (momentum) - each
+  scroll/swipe adds an impulse to a velocity that decays under `FRICTION`
+  each frame, so it glides to a stop rather than cutting instantly. Nav/dot
+  jumps use a separate smooth glide-to-target. `SCRUB_SENSITIVITY`,
+  `TOUCH_SENSITIVITY`, `FRICTION`, and `MAX_VELOCITY` at the top of each
+  project's `assets/js/main.js` control the feel — tune to taste. This uses
+  native `<video>` seeking, not a frame-image sequence; if you use much
+  longer or very high-bitrate source video and scrubbing feels sticky,
+  re-export clips with more frequent keyframes (e.g. `-g 15` in ffmpeg).
+- **Cache loader**: every room video is downloaded as a Blob up front (with a
+  real buffering progress bar) before the site reveals itself, so scrubbing
+  never touches the network again for the rest of that page session. A full
+  page reload re-downloads from scratch, but `netlify.toml`'s long
+  `Cache-Control` on `/videos/*` means that's normally served from the
+  browser's own disk cache rather than re-fetched over the network.
+- **Mobile**: portrait is force-rotated to landscape via a CSS transform
+  (sized off `100dvh`/`100dvw` so it always matches the actual visible area
+  below the address bar, without requesting true fullscreen). Touch input
+  uses swipe up/down instead of wheel. On the first tap each load, a "Continue
+  in fullscreen" prompt requests the Fullscreen API — this hides the address
+  bar on Android Chrome, but iOS Safari doesn't support the Fullscreen API at
+  all, so on iPhone the prompt is effectively a no-op dismiss button.

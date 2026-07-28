@@ -6,16 +6,17 @@ backend:
 # Netlify ignores this in production once the site is served over https.
 local_backend: true
 
-media_folder: "videos/2209-branch-ave"
-public_folder: "/videos/2209-branch-ave"
-
 collections:
   - name: "walkthrough"
     label: "Walkthrough"
     files:
-      - file: "content/rooms.json"
-        label: "Unit 9 — 2209 Branch Ave"
+      # Each project gets its own entry here, with media/public folders scoped to
+      # its own subfolder so uploads for one project never land in another's.
+      - file: "2209-Branch-Ave-Anoka-MN-55303/content/rooms.json"
+        label: "2209 Branch Ave Anoka, MN 55303 — Unit 9"
         name: "unit9"
+        media_folder: "/2209-Branch-Ave-Anoka-MN-55303/videos/2209-branch-ave"
+        public_folder: "/2209-Branch-Ave-Anoka-MN-55303/videos/2209-branch-ave"
         fields:
           - label: "Property"
             name: "property"

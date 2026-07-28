@@ -1,12 +1,14 @@
 [build]
   publish = "."
 
+# Each project's videos/content get their own header block, scoped to its own
+# subfolder - add a matching pair here when a new project is added.
 [[headers]]
-  for = "/videos/*"
+  for = "/2209-Branch-Ave-Anoka-MN-55303/videos/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
 [[headers]]
-  for = "/content/*"
+  for = "/2209-Branch-Ave-Anoka-MN-55303/content/*"
   [headers.values]
     Cache-Control = "no-cache"

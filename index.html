@@ -2,65 +2,111 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
-<title>Lion Rock — Virtual Walkthrough</title>
-<link rel="stylesheet" href="assets/css/style.css">
-<meta name="theme-color" content="#0c0c0c">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lion Rock — Projects</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Inter:wght@400;500;600&display=swap');
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+
+  html,body{
+    min-height:100%;
+    background:#0c0c0c;
+    color:#f5f3ee;
+    font-family:'Inter',sans-serif;
+  }
+
+  a{ color:inherit; text-decoration:none; }
+
+  header{
+    display:flex; align-items:center;
+    padding:32px 48px;
+  }
+  header img{ height:30px; }
+
+  h1{
+    font-family:'Playfair Display',serif;
+    font-weight:500;
+    font-size:.85rem;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    opacity:.6;
+    padding:0 48px;
+    margin-bottom:26px;
+  }
+
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
+    gap:28px;
+    padding:0 48px 64px;
+  }
+
+  .card{
+    display:block;
+    border:1px solid rgba(245,243,238,.15);
+    background:#000;
+    transition:border-color .25s ease;
+  }
+  .card:hover{ border-color:rgba(245,243,238,.5); }
+
+  .thumb{
+    position:relative;
+    aspect-ratio:16/10;
+    overflow:hidden;
+    background:#000;
+  }
+  .thumb video{
+    width:100%; height:100%;
+    object-fit:cover;
+  }
+
+  .card-title{
+    padding:18px 20px 4px;
+    font-family:'Playfair Display',serif;
+    font-size:1.1rem;
+  }
+  .card-sub{
+    padding:0 20px 20px;
+    font-size:.8rem;
+    letter-spacing:.02em;
+    opacity:.55;
+  }
+
+  @media (max-width:600px){
+    header{ padding:22px 24px; }
+    h1{ padding:0 24px; }
+    .grid{ padding:0 24px 40px; grid-template-columns:1fr; }
+  }
+</style>
 </head>
 <body>
 
-  <!-- Cache / preload loader -->
-  <div id="loader">
-    <video id="loader-video" muted loop playsinline autoplay></video>
-    <div class="loader-overlay">
-      <div class="loader-brand">Lion Rock</div>
-      <div class="loader-bar-track">
-        <div class="loader-bar-fill" id="loader-bar-fill"></div>
-      </div>
-      <div class="loader-label" id="loader-label">Loading walkthrough… 0%</div>
-    </div>
-  </div>
-
-  <!-- Header / navigation -->
-  <header id="site-header">
-    <a href="https://example.com" id="brand-link" class="brand">
-      <img src="assets/img/lion-rock-logo.png" alt="Lion Rock">
+  <header>
+    <a href="https://example.com">
+      <img src="/assets/img/lion-rock-logo.png" alt="Lion Rock">
     </a>
-    <nav id="room-nav" aria-label="Room navigation"></nav>
   </header>
 
-  <!-- Dot navigation: each row is a nav label paired with its bullet -->
-  <div id="dot-nav" aria-hidden="true"></div>
+  <h1>Projects</h1>
 
-  <!-- Single pinned video stage: scrolling scrubs one continuous timeline across all rooms -->
-  <main id="stage">
-    <video id="video-a" muted playsinline></video>
-    <video id="video-b" muted playsinline></video>
-  </main>
-
-  <!-- Footer text, overlaid over the walkthrough instead of a separate scroll section -->
-  <div id="footer-overlay">
-    <p id="footer-note"></p>
+  <div class="grid">
+    <a class="card" href="/2209-Branch-Ave-Anoka-MN-55303/">
+      <div class="thumb">
+        <video muted loop playsinline preload="metadata"
+               src="/2209-Branch-Ave-Anoka-MN-55303/videos/2209-branch-ave/exterior.mp4"></video>
+      </div>
+      <div class="card-title">Unit 9</div>
+      <div class="card-sub">2209 Branch Ave Anoka, MN 55303</div>
+    </a>
   </div>
 
-  <!-- Editor / Viewer mode (temporary) -->
-  <div id="mode-switch">
-    <a href="/admin/" id="editor-btn" title="Log in to add or rename rooms">Editor</a>
-    <a href="/" id="viewer-btn" title="Public walkthrough view">Viewer</a>
-  </div>
-
-  <script src="assets/js/main.js"></script>
-
-  <!-- Handles Netlify Identity invite/login links that land on the homepage -->
-  <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
   <script>
-    if (window.netlifyIdentity) {
-      window.netlifyIdentity.on('init', (user) => {
-        if (!user) {
-          window.netlifyIdentity.on('login', () => { document.location.href = '/admin/'; });
-        }
-      });
-    }
+    document.querySelectorAll('.card').forEach((card) => {
+      const video = card.querySelector('video');
+      card.addEventListener('mouseenter', () => { video.play().catch(() => {}); });
+      card.addEventListener('mouseleave', () => { video.pause(); video.currentTime = 0; });
+    });
   </script>
 </body>
 </html>

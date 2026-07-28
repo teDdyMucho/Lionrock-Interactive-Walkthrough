@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<title>Lion Rock — Virtual Walkthrough</title>
+<link rel="stylesheet" href="/2209-Branch-Ave-Anoka-MN-55303/assets/css/style.css">
+<meta name="theme-color" content="#0c0c0c">
+</head>
+<body>
+
+  <!-- Cache / preload loader -->
+  <div id="loader">
+    <video id="loader-video" muted loop playsinline autoplay></video>
+    <div class="loader-overlay">
+      <div class="loader-brand">Lion Rock</div>
+      <div class="loader-bar-track">
+        <div class="loader-bar-fill" id="loader-bar-fill"></div>
+      </div>
+      <div class="loader-label" id="loader-label">Loading walkthrough… 0%</div>
+    </div>
+  </div>
+
+  <!-- Header / navigation -->
+  <header id="site-header">
+    <a href="https://example.com" id="brand-link" class="brand">
+      <img src="/2209-Branch-Ave-Anoka-MN-55303/assets/img/lion-rock-logo.png" alt="Lion Rock">
+    </a>
+    <nav id="room-nav" aria-label="Room navigation"></nav>
+  </header>
+
+  <!-- Dot navigation: each row is a nav label paired with its bullet -->
+  <div id="dot-nav" aria-hidden="true"></div>
+
+  <!-- Single pinned video stage: scrolling scrubs one continuous timeline across all rooms -->
+  <main id="stage">
+    <video id="video-a" muted playsinline></video>
+    <video id="video-b" muted playsinline></video>
+  </main>
+
+  <!-- Footer text, overlaid over the walkthrough instead of a separate scroll section -->
+  <div id="footer-overlay">
+    <p id="footer-note"></p>
+  </div>
+
+  <!-- Editor / Viewer mode (temporary) -->
+  <div id="mode-switch">
+    <a href="/admin/" id="editor-btn" title="Log in to add or rename rooms">Editor</a>
+    <a href="/2209-Branch-Ave-Anoka-MN-55303/" id="viewer-btn" title="Public walkthrough view">Viewer</a>
+  </div>
+
+  <!-- Back to gallery -->
+  <a href="/" id="back-to-gallery" title="Back to gallery">← Gallery</a>
+
+  <!-- Mobile only: fullscreen has to be requested from a real tap, so it's a button, not automatic -->
+  <div id="fullscreen-modal">
+    <p>For the best view, continue in fullscreen.</p>
+    <button type="button" id="fullscreen-continue">Continue</button>
+  </div>
+
+  <script src="/2209-Branch-Ave-Anoka-MN-55303/assets/js/main.js"></script>
+
+  <!-- Handles Netlify Identity invite/login links that land on the homepage -->
+  <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+  <script>
+    if (window.netlifyIdentity) {
+      window.netlifyIdentity.on('init', (user) => {
+        if (!user) {
+          window.netlifyIdentity.on('login', () => { document.location.href = '/admin/'; });
+        }
+      });
+    }
+  </script>
+</body>
+</html>

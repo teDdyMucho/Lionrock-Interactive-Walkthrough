@@ -26,6 +26,8 @@
     videoA: document.getElementById('video-a'),
     videoB: document.getElementById('video-b'),
     footerNote: document.getElementById('footer-note'),
+    fullscreenModal: document.getElementById('fullscreen-modal'),
+    fullscreenContinue: document.getElementById('fullscreen-continue'),
   };
 
   // rooms: [{ id, label, video, duration, cumStart, blobUrl }]
@@ -51,7 +53,7 @@
   init();
 
   async function init() {
-    const data = await fetch('content/rooms.json', { cache: 'no-store' }).then(r => r.json());
+    const data = await fetch('/2209-Branch-Ave-Anoka-MN-55303/content/rooms.json', { cache: 'no-store' }).then(r => r.json());
 
     applyPropertyChrome(data.property);
     buildRoomsMeta(data.property, data.rooms);
@@ -288,8 +290,28 @@
     setTimeout(() => {
       els.loaderVideo.pause();
       els.loader.style.display = 'none';
+      maybeShowFullscreenModal();
     }, 650);
   }
+
+  // Fullscreen can only be requested from within a real tap/click, so on touch
+  // devices we ask every load rather than trying (and failing) to trigger it
+  // automatically. iOS Safari doesn't support the Fullscreen API at all - the
+  // request there is just a no-op and the modal dismisses normally either way.
+  function maybeShowFullscreenModal() {
+    const isTouch = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+    if (!isTouch) return;
+    els.fullscreenModal.classList.add('visible');
+  }
+
+  els.fullscreenContinue.addEventListener('click', () => {
+    const el = document.documentElement;
+    const request = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (request && !document.fullscreenElement) {
+      request.call(el).catch(() => {});
+    }
+    els.fullscreenModal.classList.remove('visible');
+  });
 
   // ---------- Scroll-scrub engine ----------
 

@@ -1,0 +1,20 @@
+{
+  "property": {
+    "brand": "Lion Rock",
+    "logoLink": "https://example.com",
+    "title": "Unit 9",
+    "address": "2209 Branch Ave Anoka, MN 55303",
+    "eyebrow": "Virtual Walkthrough",
+    "introVideo": "/2209-Branch-Ave-Anoka-MN-55303/videos/2209-branch-ave/intro.mp4",
+    "footerNote": "This is a Virtual Stage of the Advertized Unit. Actual lighting, colors, and ambiance may vary on different screen."
+  },
+  "rooms": [
+    { "label": "Exterior", "video": "/2209-Branch-Ave-Anoka-MN-55303/videos/2209-branch-ave/exterior.mp4" },
+    { "label": "Living", "video": "/2209-Branch-Ave-Anoka-MN-55303/videos/2209-branch-ave/living.mp4" },
+    { "label": "Dining", "video": "/2209-Branch-Ave-Anoka-MN-55303/videos/2209-branch-ave/dining.mp4" },
+    { "label": "Kitchen", "video": "/2209-Branch-Ave-Anoka-MN-55303/videos/2209-branch-ave/kitchen.mp4" },
+    { "label": "Bedroom 1", "video": "/2209-Branch-Ave-Anoka-MN-55303/videos/2209-branch-ave/bedroom-1.mp4" },
+    { "label": "Bathroom", "video": "/2209-Branch-Ave-Anoka-MN-55303/videos/2209-branch-ave/bathroom.mp4" },
+    { "label": "Bedroom 2", "video": "/2209-Branch-Ave-Anoka-MN-55303/videos/2209-branch-ave/bedroom-2.mp4" }
+  ]
+}
