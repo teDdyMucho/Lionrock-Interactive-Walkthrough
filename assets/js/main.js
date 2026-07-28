@@ -2,6 +2,7 @@
   'use strict';
 
   const SCRUB_SENSITIVITY = 0.0026;   // seconds of video per wheel delta unit
+  const TOUCH_SENSITIVITY = 0.007;    // seconds of video per pixel of touch swipe (swipes are shorter than wheel scrolls)
   const EASE_FACTOR = 0.15;           // how quickly the timeline eases toward the target (0-1)
   const FETCH_TIMEOUT = 20000;        // ms before the loader gives up waiting on a slow download
 
@@ -285,17 +286,43 @@
   function startScrubEngine() {
     scrubEngineActive = true;
     window.addEventListener('wheel', onWheel, { passive: false });
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', onTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', onTouchEnd, { passive: true });
     requestAnimationFrame(easeLoop);
   }
 
   function onWheel(e) {
     if (!scrubEngineActive || !totalDuration) return;
     e.preventDefault();
+    applyScrubDelta(e.deltaY * SCRUB_SENSITIVITY);
+  }
 
-    let next = globalTarget + e.deltaY * SCRUB_SENSITIVITY;
+  let touchLastY = null;
+
+  function onTouchStart(e) {
+    touchLastY = e.touches[0].clientY;
+  }
+
+  function onTouchMove(e) {
+    if (!scrubEngineActive || !totalDuration || touchLastY === null) return;
+    e.preventDefault();
+    const y = e.touches[0].clientY;
+    const deltaY = touchLastY - y; // swipe up (finger moves up) = forward, matching wheel-down = forward
+    touchLastY = y;
+    applyScrubDelta(deltaY * TOUCH_SENSITIVITY);
+  }
+
+  function onTouchEnd() {
+    touchLastY = null;
+  }
+
+  function applyScrubDelta(deltaSeconds) {
+    let next = globalTarget + deltaSeconds;
 
     if (next >= totalDuration) {
-      // scrolled past the end - loop back around to the intro instead of stopping
+      // scrolled/swiped past the end - loop back around to the intro instead of stopping
       next %= totalDuration;
       globalCurrent = next; // hard cut so we don't visibly rewind through the whole timeline to get there
     } else if (next < 0) {
