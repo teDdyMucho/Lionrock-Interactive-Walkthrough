@@ -313,7 +313,6 @@
 
   function onTouchStart(e) {
     touchLastY = e.touches[0].clientY;
-    requestFullscreenOnce();
   }
 
   function onTouchMove(e) {
@@ -371,21 +370,6 @@
       }
     }
     requestAnimationFrame(easeLoop);
-  }
-
-  // Fullscreen hides the mobile browser's address bar; can only be requested from
-  // within a real user gesture, so it's triggered on the first touch. Unsupported
-  // in Safari on iPhone - there, "Add to Home Screen" (see the manifest/meta tags
-  // in index.html) is the only way to get a chrome-less view.
-  let fullscreenRequested = false;
-  function requestFullscreenOnce() {
-    if (fullscreenRequested) return;
-    fullscreenRequested = true;
-    const el = document.documentElement;
-    const request = el.requestFullscreen || el.webkitRequestFullscreen;
-    if (request && !document.fullscreenElement) {
-      request.call(el).catch(() => {});
-    }
   }
 
   // ---------- helpers ----------

@@ -202,6 +202,11 @@ a{ color:inherit; text-decoration:none; }
 /* ---------- Mobile: always viewer-only, no editor/viewer switch ---------- */
 @media (hover:none) and (pointer:coarse){
   #mode-switch{ display:none; }
+
+  /* show the whole video frame uncropped on mobile - letterbox rather than crop,
+     with #stage's own black background filling the bars instead of stretching/cover */
+  #stage{ background:#000; }
+  #stage video{ object-fit:contain; }
 }
 
 /* ---------- Mobile: force landscape regardless of how the phone is held ---------- */
@@ -209,8 +214,11 @@ a{ color:inherit; text-decoration:none; }
   html{
     position:absolute;
     top:0; left:100%;
-    width:100vh;
-    height:100vw;
+    /* dvh/dvw (not vh/vw) so this exactly matches the visible area between the
+       address bar and the bottom of the screen, however much the browser chrome
+       is currently taking up - no hidden/cut-off content, no true fullscreen request */
+    width:100dvh;
+    height:100dvw;
     transform-origin:left top;
     transform:rotate(90deg);
     overflow:hidden;

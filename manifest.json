@@ -1,9 +1,0 @@
-{
-  "name": "Lion Rock Virtual Walkthrough",
-  "short_name": "Lion Rock",
-  "start_url": "/",
-  "display": "fullscreen",
-  "orientation": "landscape",
-  "background_color": "#0c0c0c",
-  "theme_color": "#0c0c0c"
-}
