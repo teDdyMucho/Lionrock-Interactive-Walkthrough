@@ -36,8 +36,11 @@
     loaderVideo: document.getElementById('loader-video'),
     loaderFill: document.getElementById('loader-bar-fill'),
     loaderLabel: document.getElementById('loader-label'),
+    header: document.getElementById('site-header'),
     brandLink: document.getElementById('brand-link'),
+    headerRight: document.getElementById('header-right'),
     nav: document.getElementById('room-nav'),
+    backToGallery: document.getElementById('back-to-gallery'),
     dotNav: document.getElementById('dot-nav'),
     stage: document.getElementById('stage'),
     videoA: document.getElementById('video-a'),
@@ -76,6 +79,10 @@
     buildRoomsMeta(data.property, data.rooms);
     wireNav();
     wireDotNav();
+
+    fitHeaderNav();
+    window.addEventListener('resize', fitHeaderNav);
+    window.addEventListener('orientationchange', () => setTimeout(fitHeaderNav, 50));
 
     await preloadAll();
     setupInitialStage();
@@ -155,6 +162,30 @@
       els.dotNav.appendChild(row);
       room.dotRow = row;
     });
+  }
+
+  // The nav's DOM order (Exterior ... Bedroom 2, then the gallery link) already
+  // reads right-to-left the way it should: the gallery link sits at the header's
+  // right edge, Bedroom 2 immediately to its left, on down to Exterior furthest
+  // left. This just shrinks the nav's font-size (never the gallery link or logo)
+  // so that natural order never overlaps either of them, instead of clipping or
+  // requiring a scroll.
+  const NAV_MIN_SCALE = 0.55;
+
+  function fitHeaderNav() {
+    if (!els.header || !els.nav || !els.brandLink) return;
+
+    els.nav.style.removeProperty('--nav-font-size');
+    const baseFontSize = parseFloat(getComputedStyle(els.nav.querySelector('a') || els.nav).fontSize) || 16;
+
+    const galleryWidth = els.backToGallery ? els.backToGallery.offsetWidth + 16 : 0;
+    const available = els.header.clientWidth - els.brandLink.offsetWidth - galleryWidth - 48; // 48 = buffer for header padding/gaps
+    const required = els.nav.scrollWidth;
+
+    if (available > 0 && required > available) {
+      const scale = Math.max(NAV_MIN_SCALE, available / required);
+      els.nav.style.setProperty('--nav-font-size', `${baseFontSize * scale}px`);
+    }
   }
 
   function jumpToRoom(index) {

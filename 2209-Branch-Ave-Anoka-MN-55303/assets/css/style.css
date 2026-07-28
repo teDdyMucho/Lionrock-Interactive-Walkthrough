@@ -62,21 +62,29 @@ a{ color:inherit; text-decoration:none; }
   padding:22px 48px;
   background:linear-gradient(to bottom, rgba(0,0,0,.65), rgba(0,0,0,0));
 }
-.brand{ display:flex; align-items:center; }
+.brand{ display:flex; align-items:center; flex:none; }
 .brand img{
   height:30px;
   width:auto;
   display:block;
 }
+/* min-width:0 lets this shrink below its content size instead of overlapping the
+   logo; justify-content:flex-end keeps the gallery link/last nav item anchored to
+   the header's right edge while anything that has to give ground does so on the
+   left (toward "Exterior", away from the logo) */
 #header-right{
-  display:flex; align-items:center; gap:40px;
+  display:flex; align-items:center; justify-content:flex-end; gap:40px;
+  flex:1 1 auto; min-width:0;
+  overflow:hidden;
 }
 #room-nav{
   display:flex; gap:34px;
+  min-width:0;
+  overflow:hidden;
 }
 #room-nav a{
   font-family:'Playfair Display',serif;
-  font-size:1rem;
+  font-size:var(--nav-font-size, 1rem);
   opacity:.85;
   padding-bottom:4px;
   border-bottom:1px solid transparent;
@@ -281,15 +289,7 @@ a{ color:inherit; text-decoration:none; }
   #site-header{ padding:12px 18px; }
   .brand img{ height:18px; }
   #header-right{ gap:14px; }
-  #room-nav{
-    gap:14px;
-    max-width:48vw;
-    overflow-x:auto;
-    -webkit-overflow-scrolling:touch;
-    scrollbar-width:none;
-  }
-  #room-nav::-webkit-scrollbar{ display:none; }
-  #room-nav a{ font-size:.72rem; }
+  #room-nav{ gap:14px; --nav-font-size:.72rem; }
   #dot-nav{ right:14px; gap:10px; }
   .dot-row{ gap:8px; }
   .dot-row .dot-label{ font-size:.68rem; }
