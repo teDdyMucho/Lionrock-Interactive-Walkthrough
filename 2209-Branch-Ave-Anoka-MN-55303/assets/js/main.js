@@ -13,10 +13,14 @@
   const SCRUB_SENSITIVITY = 0.00032;              // velocity impulse per wheel delta unit
   const TOUCH_SENSITIVITY = 0.0009;               // velocity impulse per pixel of touch swipe
   const FRICTION = 0.9;                           // per-frame velocity decay (0-1, higher = glides longer)
-  const MAX_VELOCITY = IS_TOUCH_DEVICE ? 0.08 : 0.15; // clamp on seconds-of-video moved per frame
+  const MAX_VELOCITY = IS_TOUCH_DEVICE ? 0.08 : 0.15; // forward cap - just becomes a playbackRate, so generous is fine
+  // Backward has no real playback, only seeking, so its jumps cost real decode time -
+  // capped tighter than forward so each seek is smaller/cheaper, at the cost of feeling
+  // more limited when flicking hard backward.
+  const MAX_BACKWARD_VELOCITY = IS_TOUCH_DEVICE ? 0.03 : 0.05;
   const VELOCITY_EPSILON = 0.0004;                // velocity below this is treated as stopped
   const SEEK_THRESHOLD = IS_TOUCH_DEVICE ? 0.05 : 0.02; // seconds of drift before bothering to re-seek
-  const MIN_PLAYBACK_RATE = 0.2;                  // forward motion: real <video> playback, not seeking
+  const MIN_PLAYBACK_RATE = 0.05;                 // forward motion: real <video> playback, not seeking
   const MAX_PLAYBACK_RATE = 3;                    // (there's no such thing as reverse playback, so
                                                    // backward motion still has to seek - see easeLoop)
   const ROOM_END_EPSILON = 0.05;                   // seconds from a clip's end that counts as "arrived"
@@ -383,7 +387,8 @@
 
   function addImpulse(deltaSeconds) {
     glideTarget = null; // raw input always takes over from a programmatic glide
-    velocity = clamp(velocity + deltaSeconds, -MAX_VELOCITY, MAX_VELOCITY);
+    const raw = velocity + deltaSeconds;
+    velocity = raw >= 0 ? clamp(raw, 0, MAX_VELOCITY) : clamp(raw, -MAX_BACKWARD_VELOCITY, 0);
   }
 
   // Forward motion plays the video for real (browser-decoded sequential frames -
@@ -408,7 +413,14 @@
     // skip while a previous seek is still resolving - firing a new one before the
     // decoder catches up is what made playback look choppy/low-framerate
     if (!video.seeking && video.readyState >= 1 && Math.abs(video.currentTime - localTime) > SEEK_THRESHOLD) {
-      video.currentTime = localTime;
+      // fastSeek (where supported) seeks to the nearest keyframe rather than
+      // decoding an exact frame - trades a little precision for speed, which is
+      // the right trade for continuous backward scrubbing
+      if (typeof video.fastSeek === 'function') {
+        video.fastSeek(localTime);
+      } else {
+        video.currentTime = localTime;
+      }
     }
   }
 

@@ -136,13 +136,20 @@ are just a shortcut to the two experiences.
   smooth sequential frame decoding instead of repeated seeks - it plays fast,
   then eases down to a stop. Backward motion has to fall back to seeking
   `currentTime` every frame, because no browser supports reverse `<video>`
-  playback at all. Nav/dot jumps use a separate smooth glide-to-target
-  (seek-based, since it can go either direction). `SCRUB_SENSITIVITY`,
-  `TOUCH_SENSITIVITY`, `FRICTION`, `MAX_VELOCITY`, `MIN_PLAYBACK_RATE`, and
-  `MAX_PLAYBACK_RATE` at the top of each project's `assets/js/main.js`
-  control the feel — tune to taste. If backward scrubbing still looks choppy,
-  that's the seeking path hitting sparse keyframes; re-export clips with more
-  frequent keyframes (e.g. `-g 15` in ffmpeg) to fix it.
+  playback at all. Backward's seek jumps are capped smaller than forward's
+  (`MAX_BACKWARD_VELOCITY`) since every backward step costs real decode time,
+  and it uses `video.fastSeek()` where supported (seeks to the nearest
+  keyframe rather than decoding an exact frame - faster, slightly less
+  precise). Nav/dot jumps use a separate smooth glide-to-target (seek-based,
+  since it can go either direction). `SCRUB_SENSITIVITY`,
+  `TOUCH_SENSITIVITY`, `FRICTION`, `MAX_VELOCITY`, `MAX_BACKWARD_VELOCITY`,
+  `MIN_PLAYBACK_RATE`, and `MAX_PLAYBACK_RATE` at the top of each project's
+  `assets/js/main.js` control the feel — tune to taste. If backward scrubbing
+  still looks choppy, that's the seeking path hitting sparse keyframes;
+  re-export clips with more frequent keyframes (e.g. `-g 15` in ffmpeg) to
+  fix it, or consider pre-rendering a reversed copy of each clip so backward
+  scrubbing can also use real forward playback (bigger change - ask if you
+  want this built).
 - **Cache loader**: every room video is downloaded as a Blob up front (with a
   real buffering progress bar) before the site reveals itself, so scrubbing
   never touches the network again for the rest of that page session. A full
