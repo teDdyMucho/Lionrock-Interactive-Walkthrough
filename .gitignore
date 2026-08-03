@@ -2,3 +2,13 @@ node_modules/
 .netlify/
 .DS_Store
 Thumbs.db
+
+# Secrets / local config — never commit these.
+# The .example templates ARE committed so setup stays self-documenting.
+.env
+.env.*
+!.env.example
+
+# The browser loads this file directly, so it holds the real Supabase values.
+assets/js/supabase-config.js
+!assets/js/supabase-config.example.js

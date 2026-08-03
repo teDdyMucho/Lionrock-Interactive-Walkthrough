@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<title>Lion Rock — Virtual Walkthrough</title>
+<link rel="stylesheet" href="/walkthrough/assets/style.css">
+<meta name="theme-color" content="#0c0c0c">
+<style>
+  /* Shown instead of the loader when a property has no videos / doesn't exist,
+     so the page never hangs on a spinner with no explanation. */
+  #walkthrough-error{
+    position:fixed; inset:0; z-index:1200;
+    display:none; flex-direction:column; align-items:center; justify-content:center;
+    gap:20px; padding:40px; text-align:center;
+    background:#0c0c0c;
+  }
+  #walkthrough-error.show{ display:flex; }
+  #walkthrough-error p{
+    font-family:'Playfair Display',serif;
+    font-size:1.15rem; max-width:34ch; line-height:1.6;
+  }
+  #walkthrough-error a{
+    font-size:.75rem; letter-spacing:.1em; text-transform:uppercase;
+    padding:12px 26px; border:1px solid rgba(245,243,238,.35);
+  }
+  #walkthrough-error a:hover{ border-color:rgba(245,243,238,.8); }
+</style>
+</head>
+<body>
+
+  <!-- Cache / preload loader -->
+  <div id="loader">
+    <video id="loader-video" muted loop playsinline autoplay></video>
+    <div class="loader-overlay">
+      <div class="loader-brand">Lion Rock</div>
+      <div class="loader-bar-track">
+        <div class="loader-bar-fill" id="loader-bar-fill"></div>
+      </div>
+      <div class="loader-label" id="loader-label">Loading walkthrough… 0%</div>
+    </div>
+  </div>
+
+  <div id="walkthrough-error">
+    <p id="walkthrough-error-text"></p>
+    <a href="/">← Back to gallery</a>
+  </div>
+
+  <!-- Header / navigation -->
+  <header id="site-header">
+    <a href="/" id="brand-link" class="brand">
+      <img src="/assets/img/lion-rock-logo.png" alt="Lion Rock">
+    </a>
+    <div id="header-right">
+      <nav id="room-nav" aria-label="Room navigation"></nav>
+      <a href="/" id="back-to-gallery" title="Back to gallery">← Gallery</a>
+    </div>
+  </header>
+
+  <!-- Dot navigation: each row is a nav label paired with its bullet -->
+  <div id="dot-nav" aria-hidden="true"></div>
+
+  <!-- Single pinned video stage: scrolling scrubs one continuous timeline across all rooms -->
+  <main id="stage">
+    <video id="video-a" muted playsinline></video>
+    <video id="video-b" muted playsinline></video>
+  </main>
+
+  <!-- Footer text, overlaid over the walkthrough instead of a separate scroll section -->
+  <div id="footer-overlay">
+    <p id="footer-note"></p>
+  </div>
+
+  <!-- Mobile only: fullscreen has to be requested from a real tap, so it's a button, not automatic -->
+  <div id="fullscreen-modal">
+    <p>For the best view, continue in fullscreen.</p>
+    <button type="button" id="fullscreen-continue">Continue</button>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/supabase-config.js"></script>
+  <script src="/walkthrough/assets/rooms-source.js"></script>
+  <script src="/walkthrough/assets/main.js"></script>
+</body>
+</html>

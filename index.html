@@ -19,10 +19,170 @@
   a{ color:inherit; text-decoration:none; }
 
   header{
-    display:flex; align-items:center;
+    display:flex; align-items:center; justify-content:space-between;
     padding:32px 48px;
   }
   header img{ height:30px; }
+
+  /* ---------- Upload button ---------- */
+  .upload-btn{
+    display:flex; align-items:center; gap:9px;
+    padding:11px 20px;
+    border:1px solid rgba(245,243,238,.3);
+    background:transparent;
+    color:var(--paper,#f5f3ee);
+    font-family:'Inter',sans-serif;
+    font-size:.75rem; letter-spacing:.1em; text-transform:uppercase;
+    cursor:pointer;
+    transition:border-color .25s ease, background .25s ease;
+  }
+  .upload-btn:hover{ border-color:rgba(245,243,238,.75); background:rgba(245,243,238,.06); }
+  .upload-btn svg{ width:14px; height:14px; }
+
+  /* ---------- Upload modal ---------- */
+  #upload-modal{
+    position:fixed; inset:0; z-index:500;
+    display:none; align-items:flex-start; justify-content:center;
+    padding:48px 20px;
+    background:rgba(0,0,0,.8);
+    overflow-y:auto;
+  }
+  #upload-modal.open{ display:flex; }
+
+  .upload-panel{
+    width:min(760px,100%);
+    background:#0c0c0c;
+    border:1px solid rgba(245,243,238,.18);
+    padding:34px 38px 38px;
+  }
+
+  .upload-head{
+    display:flex; align-items:flex-start; justify-content:space-between;
+    gap:20px; margin-bottom:8px;
+  }
+  .upload-head h2{
+    font-family:'Playfair Display',serif;
+    font-weight:500; font-size:1.35rem;
+  }
+  .upload-close{
+    background:none; border:none; color:#f5f3ee;
+    font-size:1.5rem; line-height:1; cursor:pointer; opacity:.55;
+  }
+  .upload-close:hover{ opacity:1; }
+  .upload-sub{ font-size:.82rem; opacity:.55; margin-bottom:26px; }
+
+  .upload-step{ display:none; }
+  .upload-step.active{ display:block; }
+
+  /* step 1 — property picker */
+  #property-list{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
+    gap:12px; margin-bottom:20px;
+  }
+  .property-option{
+    display:flex; flex-direction:column; align-items:flex-start; gap:5px;
+    padding:16px 18px; text-align:left; cursor:pointer;
+    border:1px solid rgba(245,243,238,.16);
+    background:transparent; color:#f5f3ee;
+    font-family:'Inter',sans-serif;
+    transition:border-color .2s ease, background .2s ease;
+  }
+  .property-option:hover{ border-color:rgba(245,243,238,.45); }
+  .property-option.selected{
+    border-color:#f5f3ee;
+    background:rgba(245,243,238,.07);
+  }
+  .property-name{ font-family:'Playfair Display',serif; font-size:1rem; }
+  .property-address{ font-size:.75rem; opacity:.55; }
+
+  .link-btn{
+    background:none; border:none; padding:0; cursor:pointer;
+    color:#f5f3ee; font-family:'Inter',sans-serif;
+    font-size:.78rem; letter-spacing:.04em; opacity:.6;
+    text-decoration:underline; text-underline-offset:3px;
+  }
+  .link-btn:hover{ opacity:1; }
+
+  #new-property-form{ display:none; gap:10px; margin:18px 0 4px; }
+  #new-property-form.open{ display:flex; flex-wrap:wrap; }
+  #new-property-form input{
+    flex:1 1 200px;
+    padding:11px 13px;
+    background:#000; color:#f5f3ee;
+    border:1px solid rgba(245,243,238,.2);
+    font-family:'Inter',sans-serif; font-size:.85rem;
+  }
+  #new-property-form input:focus{ outline:none; border-color:rgba(245,243,238,.6); }
+
+  /* step 2 — the 7 areas */
+  #area-grid{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr));
+    gap:14px; margin-bottom:24px;
+  }
+  .area-slot{ border:1px solid rgba(245,243,238,.16); padding:14px 15px 12px; }
+  .area-label{
+    display:flex; align-items:baseline; gap:8px;
+    font-family:'Playfair Display',serif;
+    font-size:.95rem; margin-bottom:10px;
+  }
+  .area-opt{
+    font-family:'Inter',sans-serif;
+    font-size:.6rem; letter-spacing:.08em; text-transform:uppercase;
+    opacity:.4;
+  }
+  .area-slot.optional{ border-style:dashed; }
+  .area-drop{
+    display:flex; align-items:center; justify-content:center;
+    min-height:64px; padding:10px;
+    border:1px dashed rgba(245,243,238,.25);
+    cursor:pointer; text-align:center;
+    transition:border-color .2s ease, background .2s ease;
+  }
+  .area-drop:hover, .area-drop.dragging{
+    border-color:rgba(245,243,238,.7);
+    background:rgba(245,243,238,.05);
+  }
+  .area-hint{ font-size:.72rem; opacity:.6; word-break:break-word; }
+  .area-slot.staged .area-hint{ opacity:.95; }
+  .area-slot.staged{ border-color:rgba(245,243,238,.45); }
+  .area-slot.done{ border-color:#5f8f6a; }
+  .area-slot.done .area-hint{ color:#8fc79b; opacity:1; }
+  .area-slot.error{ border-color:#a35c5c; }
+  .area-slot.error .area-hint{ color:#d99; opacity:1; }
+
+  .area-progress{ height:2px; background:rgba(245,243,238,.15); margin-top:10px; }
+  .area-progress-fill{ height:100%; width:0; background:#f5f3ee; transition:width .3s ease; }
+
+  .upload-actions{
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    padding-top:20px; border-top:1px solid rgba(245,243,238,.12);
+  }
+  .btn{
+    padding:12px 26px; cursor:pointer;
+    border:1px solid rgba(245,243,238,.3);
+    background:transparent; color:#f5f3ee;
+    font-family:'Inter',sans-serif;
+    font-size:.75rem; letter-spacing:.1em; text-transform:uppercase;
+    transition:border-color .2s ease, background .2s ease;
+  }
+  .btn:hover:not(:disabled){ border-color:rgba(245,243,238,.75); background:rgba(245,243,238,.06); }
+  .btn-primary{ background:#f5f3ee; color:#0c0c0c; border-color:#f5f3ee; }
+  .btn-primary:hover:not(:disabled){ background:#fff; }
+  .btn:disabled{ opacity:.35; cursor:not-allowed; }
+
+  .upload-note{ font-size:.8rem; opacity:.6; line-height:1.6; }
+  .upload-note code{
+    font-size:.76rem; padding:1px 5px;
+    background:rgba(245,243,238,.1);
+  }
+  #upload-status{ font-size:.78rem; opacity:.75; }
+  #property-status{
+    font-size:.78rem; opacity:.75; line-height:1.55;
+    margin-top:14px;
+  }
+  #property-status:empty{ margin-top:0; }
+  .error, #upload-status.error{ color:#d99; opacity:1; }
+  #areas-for{ font-family:'Playfair Display',serif; }
 
   h1{
     font-family:'Playfair Display',serif;
@@ -41,6 +201,13 @@
     gap:28px;
     padding:0 48px 64px;
   }
+
+  #gallery-status{
+    padding:0 48px 48px;
+    font-size:.85rem;
+    opacity:.5;
+  }
+  #gallery-status:empty{ padding:0; }
 
   .card{
     display:block;
@@ -77,6 +244,8 @@
     header{ padding:22px 24px; }
     h1{ padding:0 24px; }
     .grid{ padding:0 24px 40px; grid-template-columns:1fr; }
+    .upload-panel{ padding:24px 20px 28px; }
+    #upload-modal{ padding:20px 12px; }
   }
 </style>
 </head>
@@ -86,27 +255,76 @@
     <a href="https://example.com">
       <img src="/assets/img/lion-rock-logo.png" alt="Lion Rock">
     </a>
+
+    <button class="upload-btn" id="upload-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="17 8 12 3 7 8"></polyline>
+        <line x1="12" y1="3" x2="12" y2="15"></line>
+      </svg>
+      Upload
+    </button>
   </header>
 
   <h1>Projects</h1>
 
-  <div class="grid">
-    <a class="card" href="/2209-Branch-Ave-Anoka-MN-55303/">
-      <div class="thumb">
-        <video muted loop playsinline preload="metadata"
-               src="/2209-Branch-Ave-Anoka-MN-55303/videos/2209-branch-ave/exterior.mp4"></video>
+  <!-- Every card is rendered from Supabase by assets/js/gallery.js -->
+  <div class="grid" id="grid"></div>
+
+  <p id="gallery-status"></p>
+
+  <!-- ---------- Upload modal ---------- -->
+  <div id="upload-modal">
+    <div class="upload-panel">
+
+      <div class="upload-head">
+        <h2>Upload Walkthrough Videos</h2>
+        <button class="upload-close" id="upload-close" aria-label="Close">&times;</button>
       </div>
-      <div class="card-title">Unit 9</div>
-      <div class="card-sub">2209 Branch Ave Anoka, MN 55303</div>
-    </a>
+
+      <!-- Step 1: which property -->
+      <div class="upload-step active" id="step-property">
+        <p class="upload-sub">What property are these videos for?</p>
+
+        <div id="property-list"></div>
+
+        <button class="link-btn" id="show-new-property">+ Add a new property</button>
+
+        <div id="new-property-form">
+          <input type="text" id="new-title" placeholder="Unit / project title (e.g. Unit 9)">
+          <input type="text" id="new-address" placeholder="Address">
+          <button class="btn" id="save-new-property">Save</button>
+        </div>
+
+        <p id="property-status"></p>
+
+        <div class="upload-actions">
+          <button class="btn btn-primary" id="to-areas" disabled>Continue</button>
+        </div>
+      </div>
+
+      <!-- Step 2: the 7 areas -->
+      <div class="upload-step" id="step-areas">
+        <p class="upload-sub">
+          Uploading to <span id="areas-for"></span> — add a video for each area.
+        </p>
+
+        <div id="area-grid"></div>
+
+        <div class="upload-actions">
+          <button class="btn" id="back-to-property">Back</button>
+          <button class="btn btn-primary" id="start-upload" disabled>Upload</button>
+          <span id="upload-status"></span>
+        </div>
+      </div>
+
+    </div>
   </div>
 
-  <script>
-    document.querySelectorAll('.card').forEach((card) => {
-      const video = card.querySelector('video');
-      card.addEventListener('mouseenter', () => { video.play().catch(() => {}); });
-      card.addEventListener('mouseleave', () => { video.pause(); video.currentTime = 0; });
-    });
-  </script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/supabase-config.js"></script>
+  <script src="/assets/js/gallery.js"></script>
+  <script src="/assets/js/upload.js"></script>
 </body>
 </html>

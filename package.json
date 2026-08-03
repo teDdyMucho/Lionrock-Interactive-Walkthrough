@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "description": "Lion Rock interactive scroll-scrub video walkthrough (static site, no build step)",
   "scripts": {
-    "dev": "npx --yes serve -l 5000 ."
+    "config": "node scripts/gen-config.js",
+    "dev": "npm run config && npx --yes serve -l 5000 ."
   }
 }

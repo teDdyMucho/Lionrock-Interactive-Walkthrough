@@ -7,8 +7,19 @@ HTML/CSS/JS, so it deploys to Netlify as-is.
 ## Project structure
 
 ```
-index.html                            Root gallery: grid of project thumbnails
+index.html                            Root gallery: grid of project thumbnails + Upload button
 assets/img/lion-rock-logo.png         Shared brand logo (used by the gallery)
+assets/js/supabase-config.js          Supabase URL + anon key (generated from .env)
+assets/js/upload.js                   Upload modal: property picker → 7 room slots
+assets/js/gallery.js                  Appends a card per uploaded property
+scripts/gen-config.js                 Writes supabase-config.js from .env
+supabase/schema.sql                   Tables, Storage bucket, and RLS policies
+supabase/migrations/                  Policy changes to run after schema.sql
+
+walkthrough/                          Shared walkthrough for uploaded properties
+  index.html                          Page shell, driven by ?property=<slug>
+  assets/rooms-source.js              Builds the room list from Supabase
+  assets/main.js                      Scrub engine (copy of the per-project one)
 
 2209-Branch-Ave-Anoka-MN-55303/       One project ("Unit 9")
   index.html                          Page shell (loader, header, footer, stage)
@@ -127,6 +138,136 @@ Until step 4/5 is done for a given person, they simply can't log into
 `/admin/` — that's the real permission boundary; the "Editor/Viewer" buttons
 are just a shortcut to the two experiences.
 
+## 5. Turn on the Upload button (Supabase)
+
+The **Upload** button in the gallery header opens a two-step modal: first pick
+*what property* the videos belong to, then drop a video into each of the 7 room
+areas. Files go to a Supabase Storage bucket and the resulting public URL is
+saved to a database column.
+
+1. Create a project at [supabase.com](https://supabase.com).
+2. **SQL Editor → New query** → paste in `supabase/schema.sql` and run it. It
+   creates the `properties` and `property_videos` tables, the
+   `walkthrough-videos` Storage bucket, and the RLS policies. It's safe to
+   re-run — nothing is dropped.
+3. Set up your local config:
+
+   ```bash
+   cp .env.example .env      # then paste your values in
+   npm run config            # generates assets/js/supabase-config.js from .env
+   ```
+
+   **Project Settings → API** is where the Project URL and `anon` public key
+   live. You only ever type them into `.env` — `npm run config` generates the
+   browser file from it, and `npm run dev` runs it for you automatically.
+
+Until that's done the modal still opens, but the property step shows a
+"Supabase isn't configured yet" note instead of a list — nothing crashes.
+
+### Why two config files
+
+This site has **no build step**, so nothing bundles a `.env` into the page and
+the browser can't read one. `assets/js/supabase-config.js` is the file the
+browser actually loads via a `<script>` tag — that's the one that makes the
+upload work. `.env` stays the single source of truth, and
+`scripts/gen-config.js` bridges the two so you never type the key twice. (It
+also refuses to write a `service_role` key, which would otherwise silently
+hand every visitor full database access.)
+
+Both real files are gitignored; only the templates and the generator are
+committed, so credentials never land in a commit:
+
+```
+.env                                  ignored    ← your real values (edit this one)
+.env.example                          committed  ← the template
+assets/js/supabase-config.js          ignored    ← generated; the browser reads this
+assets/js/supabase-config.example.js  committed  ← the template
+scripts/gen-config.js                 committed  ← generates one from the other
+```
+
+Never put the `service_role` key in either file. It bypasses RLS entirely and
+must never reach the browser — the `anon` key is the only one that belongs
+client-side.
+
+### Deploying to Netlify
+
+Since `supabase-config.js` isn't in the repo, Netlify has to generate it at
+deploy time — the same script does this:
+
+1. **Site configuration → Environment variables** → add `SUPABASE_URL` and
+   `SUPABASE_ANON_KEY`.
+2. Set the build command to `npm run config` (publish directory stays `.`).
+
+`gen-config.js` reads real environment variables in preference to `.env`, so
+the same command works locally and on Netlify. Skip this and the deployed site
+still loads fine — the Upload button will just report that Supabase isn't
+configured.
+
+### How uploads are stored
+
+- Storage path is `<property-slug>/<area>.<ext>` (e.g.
+  `2209-Branch-Ave-Anoka-MN-55303/kitchen.mp4`).
+- `property_videos` has a `unique (property_id, area)` constraint and the
+  upload upserts on it, so re-uploading an area **replaces** that room's video
+  rather than creating a duplicate row.
+- The 7 areas are fixed by a check constraint in the schema and the
+  `ROOM_AREAS` list in `assets/js/upload.js` — adding an eighth room means
+  updating both.
+
+### Who can upload
+
+⚠️ **Uploads are currently open to everyone.** `schema.sql` ships with strict
+policies (writes require a login), but
+`supabase/migrations/001-open-uploads-to-anon.sql` widens them to `anon` so the
+Upload button works without a sign-in step.
+
+The `anon` key ships in client-side JavaScript and is public by design, so with
+migration 001 applied, **anyone who finds the site URL can upload videos into
+your bucket and create properties.** There's no rate limit and no record of who
+uploaded what. That's a reasonable tradeoff for a demo or soft launch — but
+before the site is widely public, run
+`supabase/migrations/002-require-login-to-upload.sql` to reverse it, and add
+Supabase Auth to the modal at the same time (nothing signs a user in yet, so
+locking down without adding auth just breaks the button).
+
+Never use the `service_role` key to work around an RLS error — it bypasses all
+policies and must never reach a browser.
+
+### What happens after an upload
+
+Uploaded properties appear in the gallery automatically and are fully
+watchable — no code changes, no new folder:
+
+```
+index.html            empty grid; every card comes from Supabase
+  ↓ assets/js/gallery.js renders a card per property that has videos
+walkthrough/          one shared page, driven by ?property=<slug>
+  ↓ assets/rooms-source.js  builds {property, rooms} from Supabase
+  ↓ assets/main.js          the same scrub engine the per-project pages use
+```
+
+Cards link to `/walkthrough/?property=<slug>`, and a property only appears once
+it has at least one uploaded video.
+
+### The Intro slot
+
+The upload modal has 8 slots: an optional **Intro** plus the 7 rooms. The intro
+plays first, sits behind the loading bar, and is where the timeline loops back
+to after the last room — it gets no nav link or dot of its own.
+
+Leave it empty and the walkthrough simply opens on Exterior. (Don't reuse a room
+clip as the intro: it would then play twice before the walkthrough moves on.)
+`intro` needs `supabase/migrations/003-add-intro-video.sql` to be allowed.
+
+`walkthrough/assets/main.js` is a copy of the per-project engine with exactly
+one change — it calls `loadRoomsFromSupabase()` instead of fetching
+`content/rooms.json`. If you tune the scrub feel in one, port it to the other.
+
+Two systems coexist deliberately: the Decap CMS "Editor" screen commits videos
+to `rooms.json` in git (that's how Unit 9 works), while the Upload button
+writes to Supabase (how everything new works). Unit 9 keeps its folder and
+behaves exactly as before.
+
 ## Notes / things to know
 
 - **Scrubbing feel**: motion is velocity/friction based (momentum) - each
@@ -150,9 +291,18 @@ are just a shortcut to the two experiences.
   fix it, or consider pre-rendering a reversed copy of each clip so backward
   scrubbing can also use real forward playback (bigger change - ask if you
   want this built).
-- **Cache loader**: every room video is downloaded as a Blob up front (with a
-  real buffering progress bar) before the site reveals itself, so scrubbing
-  never touches the network again for the rest of that page session. A full
+- **Cache loader**: every room video is downloaded as a Blob (with a real
+  buffering progress bar) so scrubbing never touches the network again for the
+  rest of that page session. The shared `walkthrough/` page only *waits* on the
+  first clip before revealing — the rest stream in behind it, so a 7-room
+  property is watchable after ~7MB instead of ~45MB. Rooms join the timeline as
+  their metadata lands; `switchToRoom`/`prewarmNeighbor` no-op on a room whose
+  blob hasn't arrived yet.
+- **Scrub pacing**: backward motion and mid-glide seeks are decoder-paced — a
+  new seek is only issued once the previous one's `seeked` event has fired.
+  Firing one per animation frame queues work the decoder can't keep up with,
+  which is what reads as stutter. Position still accumulates every frame, so
+  the momentum physics stay frame-accurate. A full
   page reload re-downloads from scratch, but `netlify.toml`'s long
   `Cache-Control` on `/videos/*` means that's normally served from the
   browser's own disk cache rather than re-fetched over the network.

@@ -1,0 +1,301 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Inter:wght@400;500;600&display=swap');
+
+:root{
+  --ink:#0c0c0c;
+  --paper:#f5f3ee;
+  --accent:#e9e4d8;
+  color-scheme: dark;
+}
+
+*{ box-sizing:border-box; margin:0; padding:0; }
+
+html,body{
+  height:100%;
+  background:var(--ink);
+  color:var(--paper);
+  font-family:'Inter',sans-serif;
+  overflow:hidden;
+  touch-action:none; /* stop the browser from ever treating a swipe as its own scroll/zoom gesture */
+  overscroll-behavior:none;
+}
+
+a{ color:inherit; text-decoration:none; }
+
+/* ---------- Loader ---------- */
+#loader{
+  position:fixed; inset:0; z-index:1000;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--ink);
+  transition:opacity .6s ease;
+}
+#loader.hidden{ opacity:0; pointer-events:none; }
+#loader-video{
+  position:absolute; inset:0;
+  width:100%; height:100%;
+  object-fit:cover;
+  opacity:.35;
+}
+.loader-overlay{
+  position:relative; z-index:1;
+  display:flex; flex-direction:column; align-items:center; gap:18px;
+  width:min(360px,80vw);
+}
+.loader-brand{
+  font-family:'Playfair Display',serif;
+  font-size:1.8rem; letter-spacing:.04em;
+}
+.loader-bar-track{
+  width:100%; height:2px; background:rgba(245,243,238,.2);
+}
+.loader-bar-fill{
+  height:100%; width:0%; background:var(--paper);
+  transition:width .25s ease;
+}
+.loader-label{
+  font-size:.78rem; letter-spacing:.08em; text-transform:uppercase; opacity:.75;
+}
+
+/* ---------- Header ---------- */
+#site-header{
+  position:fixed; top:0; left:0; right:0; z-index:100;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:22px 48px;
+  background:linear-gradient(to bottom, rgba(0,0,0,.65), rgba(0,0,0,0));
+}
+.brand{ display:flex; align-items:center; flex:none; }
+.brand img{
+  height:30px;
+  width:auto;
+  display:block;
+}
+/* min-width:0 lets this shrink below its content size instead of overlapping the
+   logo; justify-content:flex-end keeps the gallery link/last nav item anchored to
+   the header's right edge while anything that has to give ground does so on the
+   left (toward "Exterior", away from the logo) */
+#header-right{
+  display:flex; align-items:center; justify-content:flex-end; gap:40px;
+  flex:1 1 auto; min-width:0;
+  overflow:hidden;
+}
+#room-nav{
+  display:flex; gap:34px;
+  min-width:0;
+  overflow:hidden;
+}
+#room-nav a{
+  font-family:'Playfair Display',serif;
+  font-size:var(--nav-font-size, 1rem);
+  opacity:.85;
+  padding-bottom:4px;
+  border-bottom:1px solid transparent;
+  transition:opacity .25s ease, border-color .25s ease;
+  white-space:nowrap;
+}
+#room-nav a:hover{ opacity:1; }
+#room-nav a.active{
+  opacity:1;
+  border-color:var(--paper);
+}
+
+/* ---------- Dot nav: each row is a label aligned to its own bullet ---------- */
+#dot-nav{
+  position:fixed; right:40px; top:50%; transform:translateY(-50%);
+  z-index:90;
+  display:flex; flex-direction:column; align-items:flex-end; gap:22px;
+}
+
+.dot-row{
+  display:flex; align-items:center; gap:16px;
+}
+
+.dot-row .dot-label{
+  font-family:'Playfair Display',serif;
+  font-size:.95rem;
+  letter-spacing:.05em;
+  white-space:nowrap;
+  opacity:0;
+  transform:translateY(14px);
+  transition:transform .45s cubic-bezier(.4,0,.2,1), opacity .35s ease;
+  pointer-events:none;
+}
+.dot-row.label-above .dot-label{ transform:translateY(-14px); opacity:0; }
+.dot-row.label-below .dot-label{ transform:translateY(14px); opacity:0; }
+.dot-row.active .dot-label{ transform:translateY(0); opacity:.95; }
+
+.dot-row .dot{
+  appearance:none;
+  -webkit-appearance:none;
+  border:none;
+  padding:0;
+  cursor:pointer;
+  width:6px; height:6px; border-radius:50%;
+  background-color:rgba(245,243,238,.45);
+  transition:background-color .3s ease, width .3s ease, height .3s ease;
+  flex:none;
+}
+.dot-row .dot:hover{ background-color:rgba(245,243,238,.7); }
+.dot-row.active .dot{
+  width:9px; height:9px;
+  background-color:var(--paper);
+}
+.dot-row .dot:focus-visible{
+  outline:2px solid var(--paper);
+  outline-offset:3px;
+}
+
+/* ---------- Stage: single fixed full-viewport video (no page scrolling at all) ---------- */
+#stage{
+  position:fixed; inset:0;
+  overflow:hidden;
+}
+
+#stage video{
+  position:absolute; inset:0;
+  width:100%; height:100%;
+  object-fit:cover;
+  opacity:0;
+  z-index:0;
+}
+
+#stage video.active{
+  opacity:1;
+  z-index:1;
+}
+
+#stage::after{
+  content:'';
+  position:absolute; inset:0;
+  background:linear-gradient(to top, rgba(0,0,0,.55) 0%, rgba(0,0,0,.02) 35%, rgba(0,0,0,.25) 100%);
+  pointer-events:none;
+  z-index:2;
+}
+
+/* ---------- Footer text, overlaid bottom-right of the stage ---------- */
+#footer-overlay{
+  position:fixed; right:48px; bottom:32px; z-index:50;
+  max-width:480px;
+  text-align:right;
+}
+#footer-note{
+  font-family:'Playfair Display',serif;
+  font-size:.85rem;
+  font-style:italic;
+  opacity:.85;
+  line-height:1.5;
+  text-shadow:0 2px 14px rgba(0,0,0,.85);
+}
+
+/* ---------- Editor / Viewer switch: invisible until the pointer hovers the corner ---------- */
+#mode-switch{
+  position:fixed; left:0; bottom:0; z-index:100;
+  padding:20px;
+  display:flex; gap:8px;
+  opacity:0;
+  transition:opacity .3s ease;
+}
+#mode-switch:hover{ opacity:1; }
+#mode-switch a{
+  padding:8px 16px;
+  font-size:.75rem;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  background:rgba(0,0,0,.55);
+  border:1px solid rgba(245,243,238,.35);
+  border-radius:999px;
+  backdrop-filter:blur(4px);
+  transition:background .2s ease, border-color .2s ease;
+}
+#mode-switch a:hover{
+  background:rgba(0,0,0,.8);
+  border-color:var(--paper);
+}
+
+/* ---------- Back to gallery: sits in the header row, right of the nav ---------- */
+#back-to-gallery{
+  font-family:'Playfair Display',serif;
+  font-size:.85rem;
+  letter-spacing:.04em;
+  opacity:.75;
+  transition:opacity .2s ease;
+  white-space:nowrap;
+}
+#back-to-gallery:hover{ opacity:1; }
+
+/* ---------- Mobile fullscreen prompt ---------- */
+#fullscreen-modal{
+  position:fixed; inset:0; z-index:1100;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:22px;
+  background:rgba(0,0,0,.92);
+  opacity:0; pointer-events:none;
+  transition:opacity .3s ease;
+  text-align:center; padding:24px;
+}
+#fullscreen-modal.visible{ opacity:1; pointer-events:auto; }
+#fullscreen-modal p{
+  font-family:'Playfair Display',serif;
+  font-size:1.15rem;
+  max-width:320px;
+  line-height:1.4;
+}
+#fullscreen-modal button{
+  appearance:none; -webkit-appearance:none;
+  border:1px solid var(--paper);
+  background:transparent;
+  color:var(--paper);
+  padding:12px 34px;
+  border-radius:999px;
+  font-size:.8rem;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  cursor:pointer;
+}
+
+/* ---------- Mobile: always viewer-only, no editor/viewer switch ---------- */
+@media (hover:none) and (pointer:coarse){
+  #mode-switch{ display:none; }
+
+  /* show the whole video frame uncropped on mobile - letterbox rather than crop,
+     with #stage's own black background filling the bars instead of stretching/cover */
+  #stage{ background:#000; }
+  #stage video{ object-fit:contain; }
+}
+
+/* ---------- Mobile: force landscape regardless of how the phone is held ---------- */
+@media screen and (max-width:900px) and (orientation:portrait){
+  html{
+    position:absolute;
+    top:0; left:100%;
+    /* dvh/dvw (not vh/vw) so this exactly matches the visible area between the
+       address bar and the bottom of the screen, however much the browser chrome
+       is currently taking up - no hidden/cut-off content, no true fullscreen request */
+    width:100dvh;
+    height:100dvw;
+    transform-origin:left top;
+    transform:rotate(90deg);
+    overflow:hidden;
+  }
+}
+
+/* ---------- Small landscape screens (phones) ----------
+   Matches BOTH a phone truly held in landscape (small width, small height)
+   AND a phone held in portrait that we're force-rotating (the common case) -
+   media queries evaluate the physical, unrotated viewport, so a portrait
+   phone reports its normal tall height even while its content is rotated to
+   look landscape. Missing that second condition here is why these overlays
+   were rendering at full desktop size (and clipping off-screen) on phones
+   held upright. */
+@media screen and (max-width:1000px) and (max-height:520px),
+       screen and (max-width:900px) and (orientation:portrait){
+  #site-header{ padding:12px 18px; }
+  .brand img{ height:18px; }
+  #header-right{ gap:14px; }
+  #room-nav{ gap:14px; --nav-font-size:.72rem; }
+  #dot-nav{ right:14px; gap:10px; }
+  .dot-row{ gap:8px; }
+  .dot-row .dot-label{ font-size:.68rem; }
+  .dot-row .dot{ width:5px; height:5px; }
+  .dot-row.active .dot{ width:7px; height:7px; }
+  #footer-overlay{ right:16px; bottom:12px; max-width:170px; }
+  #footer-note{ font-size:.58rem; }
+  #back-to-gallery{ font-size:.68rem; }
+}
