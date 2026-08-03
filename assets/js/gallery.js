@@ -24,7 +24,16 @@
     !cfg.anonKey.includes('YOUR-ANON');
 
   if (!ready) {
-    setStatus('Supabase isn\'t configured — run `npm run config` after filling in .env.');
+    // Distinguish the two failure modes: locally you forgot to generate the
+    // config; on a host it means the build didn't run / env vars are missing.
+    const local = ['localhost', '127.0.0.1', ''].includes(location.hostname);
+    setStatus(
+      local
+        ? 'Supabase isn\'t configured — run `npm run config` after filling in .env.'
+        : 'Supabase isn\'t configured on this deployment. Set SUPABASE_URL and ' +
+          'SUPABASE_ANON_KEY in your host\'s environment variables and make sure ' +
+          'the build command runs `npm run config`.'
+    );
     return;
   }
 

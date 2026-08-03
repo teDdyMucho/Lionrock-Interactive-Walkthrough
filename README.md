@@ -189,6 +189,27 @@ Never put the `service_role` key in either file. It bypasses RLS entirely and
 must never reach the browser — the `anon` key is the only one that belongs
 client-side.
 
+### Deploying to Vercel
+
+`assets/js/supabase-config.js` is gitignored, so it does **not** exist in a
+fresh clone — Vercel has to generate it at build time. Setting environment
+variables alone is not enough: this is a static site with no bundler, so
+nothing reads `process.env` in the browser.
+
+1. **Project Settings → Environment Variables** → add `SUPABASE_URL` and
+   `SUPABASE_ANON_KEY` (values from `.env`). Apply them to Production,
+   Preview, and Development.
+2. `vercel.json` already sets `buildCommand: npm run config` and
+   `outputDirectory: "."`. If you configured the project before adding that
+   file, clear any Framework Preset override in the dashboard so `vercel.json`
+   wins.
+3. Redeploy. Env var changes only take effect on a **new** build — Vercel does
+   not re-run the old one.
+
+To verify: open `/assets/js/supabase-config.js` on the deployed URL. It should
+return JS with your project URL. A 404 means the build command didn't run; a
+file containing `YOUR-PROJECT-REF` means the env vars weren't set.
+
 ### Deploying to Netlify
 
 Since `supabase-config.js` isn't in the repo, Netlify has to generate it at

@@ -75,9 +75,13 @@ async function loadProperties() {
   const list = $('#property-list');
 
   if (!db) {
-    list.innerHTML =
-      '<p class="upload-note">Supabase isn\'t configured yet. Add your project URL and anon key to ' +
-      '<code>assets/js/supabase-config.js</code>, then run <code>supabase/schema.sql</code> in the SQL editor.</p>';
+    const local = ['localhost', '127.0.0.1', ''].includes(location.hostname);
+    list.innerHTML = local
+      ? '<p class="upload-note">Supabase isn\'t configured yet. Fill in <code>.env</code>, ' +
+        'then run <code>npm run config</code>.</p>'
+      : '<p class="upload-note">Supabase isn\'t configured on this deployment. Set ' +
+        '<code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code> in your host\'s ' +
+        'environment variables, and set the build command to <code>npm run config</code>.</p>';
     return;
   }
 
