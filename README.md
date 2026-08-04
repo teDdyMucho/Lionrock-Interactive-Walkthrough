@@ -235,21 +235,54 @@ configured.
   `ROOM_AREAS` list in `assets/js/upload.js` — adding an eighth room means
   updating both.
 
+### Admin sign-in (`/manage/`)
+
+The gallery's **Upload/Edit** button is hidden unless an admin is signed in.
+Signing in happens at **`/manage/`** using a real Supabase Auth account — not a
+password baked into the page, which anyone could read from the source.
+
+Both halves of the boundary are in place:
+
+- `/manage/` hides the Upload/Edit button unless signed in (UI).
+- `supabase/migrations/002-require-login-to-upload.sql` makes the database
+  reject writes from anyone who isn't signed in (security). **Applied** — an
+  anonymous insert now returns `401`.
+
+To add another admin: **Authentication → Users → Add user** in the Supabase
+dashboard, ticking **Auto Confirm User**. Without that tick the account can't
+sign in until its email is confirmed.
+
+Signing in redirects straight to the gallery — there's no signed-in screen. It
+uses `location.replace()`, so `/manage/` doesn't sit in history and Back can't
+bounce you into it. Visiting `/manage/` with a session already active redirects
+too.
+
+**There is no sign-out.** Once signed in, the session persists (supabase-js
+refreshes it), so an admin device stays signed in across reloads and restarts.
+To end a session, clear the site's data in browser settings — or delete/reset
+the user in the Supabase dashboard to revoke it everywhere.
+
+The session is stored by supabase-js and shared across pages, so signing in at
+`/manage/` immediately reveals the button on the gallery — including in another
+tab. `assets/js/upload.js` reuses that same authenticated client, so uploads
+carry the session.
+
+The button stays hidden on phones regardless of sign-in (see
+`assets/js/admin-gate.js` and the mobile media query).
+
 ### Who can upload
 
-⚠️ **Uploads are currently open to everyone.** `schema.sql` ships with strict
-policies (writes require a login), but
-`supabase/migrations/001-open-uploads-to-anon.sql` widens them to `anon` so the
-Upload button works without a sign-in step.
+✅ **Uploads require a signed-in admin.** Migration 002 is applied, so Supabase
+rejects writes from anyone who isn't authenticated — an anonymous insert
+returns `401`. Reads stay open, which the public walkthrough needs.
 
-The `anon` key ships in client-side JavaScript and is public by design, so with
-migration 001 applied, **anyone who finds the site URL can upload videos into
-your bucket and create properties.** There's no rate limit and no record of who
-uploaded what. That's a reasonable tradeoff for a demo or soft launch — but
-before the site is widely public, run
-`supabase/migrations/002-require-login-to-upload.sql` to reverse it, and add
-Supabase Auth to the modal at the same time (nothing signs a user in yet, so
-locking down without adding auth just breaks the button).
+Migration history, for context: `schema.sql` shipped strict, `001` briefly
+opened writes to `anon` so the Upload button worked before auth existed, and
+`002` closed it again once `/manage/` was built. Don't re-run `001` unless you
+deliberately want uploads open to anyone with the URL.
+
+The `anon` key ships in client-side JavaScript and is public by design — that's
+expected. RLS, not the key, is what gates writes.
 
 Never use the `service_role` key to work around an RLS error — it bypasses all
 policies and must never reach a browser.
@@ -270,25 +303,39 @@ walkthrough/          one shared page, driven by ?property=<slug>
 Cards link to `/walkthrough/?property=<slug>`, and a property only appears once
 it has at least one uploaded video.
 
-### Save-for-offline prompt
+### Offline caching consent
 
-Opening a walkthrough asks once, before downloading anything: **"Save for
-offline?"** with the real size ("About 53MB · 8 clips") and a Yes/No.
+The gallery (welcome page) asks **once**, permission-style:
 
-- **Yes** — every clip is stored in **Cache Storage** (`walkthrough/assets/video-cache.js`).
-  Revisits then load from disk instead of the network.
-- **No** — the walkthrough streams normally. The answer is remembered per
-  property in `localStorage`, so it isn't asked again.
+> **Allow saved data?** — For a smoother experience, please allow this app to
+> save data on your device automatically. Projects you open will load faster and
+> play without buffering.
+> `[Allow] [Decline]`
+
+The wording deliberately avoids "offline": the clips are cached, but the page
+shell still needs the network, so promising offline would overstate it. The
+honest, user-visible benefit is *faster loading*.
+
+The answer is a single site-wide preference in `localStorage`
+(`lionrock-cache-consent`), handled by `assets/js/cache-consent.js`:
+
+- **Allow** — opening any project caches its clips automatically, with no
+  further prompting. Caching starts *after* the walkthrough is already playing,
+  so it never delays the first frame.
+- **Decline** — nothing is ever cached; walkthroughs stream as before.
+
+Either way it isn't asked again. There is deliberately **no prompt on the
+walkthrough page itself** — consent lives entirely on the welcome page.
 
 This is **browser storage, not the Downloads folder** — nothing appears in a
 file manager. Users can clear it from their browser's site-data settings.
 
-Measured on the sample property: first visit downloads 52.7MB, a revisit is
-ready in **0.4s with zero network requests for video**.
+Measured on the sample property: 52.7MB cached across 8 clips; a revisit is
+ready in **0.2s with zero network requests for video**.
 
 Requires a secure context (https, or localhost) — `caches` is unavailable on
-plain http, and the prompt silently skips itself there. Quota errors are caught
-and reported, then the walkthrough continues online.
+plain http, so the prompt silently skips itself there. Quota errors are caught
+and ignored; the walkthrough continues online.
 
 **Caveat — not yet fully offline.** The clips are cached, but the page shell
 (HTML/CSS/JS) still comes from the network, so loading the URL with no

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lion Rock — Admin</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Inter:wght@400;500;600&display=swap');
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+
+  html,body{
+    min-height:100%;
+    background:#0c0c0c;
+    color:#f5f3ee;
+    font-family:'Inter',sans-serif;
+  }
+  a{ color:inherit; text-decoration:none; }
+
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:32px 48px;
+  }
+  header img{ height:30px; }
+
+  .wrap{
+    display:flex; align-items:center; justify-content:center;
+    padding:40px 24px 80px;
+  }
+
+  .card{
+    width:min(400px,100%);
+    border:1px solid rgba(245,243,238,.18);
+    padding:34px 36px 30px;
+  }
+  .card h1{
+    font-family:'Playfair Display',serif;
+    font-weight:500; font-size:1.35rem;
+    margin-bottom:8px;
+  }
+  .card .sub{
+    font-size:.82rem; opacity:.55; line-height:1.6;
+    margin-bottom:26px;
+  }
+
+  label{
+    display:block;
+    font-size:.65rem; letter-spacing:.1em; text-transform:uppercase;
+    opacity:.45; margin-bottom:7px;
+  }
+  input{
+    width:100%;
+    padding:12px 14px; margin-bottom:18px;
+    background:#000; color:#f5f3ee;
+    border:1px solid rgba(245,243,238,.2);
+    font-family:'Inter',sans-serif; font-size:.88rem;
+  }
+  input:focus{ outline:none; border-color:rgba(245,243,238,.6); }
+
+  .btn{
+    width:100%;
+    padding:13px 20px; cursor:pointer;
+    border:1px solid #f5f3ee; background:#f5f3ee; color:#0c0c0c;
+    font-family:'Inter',sans-serif;
+    font-size:.72rem; letter-spacing:.1em; text-transform:uppercase;
+    transition:background .2s ease;
+  }
+  .btn:hover:not(:disabled){ background:#fff; }
+  .btn:disabled{ opacity:.4; cursor:not-allowed; }
+
+  #login-status{
+    margin-top:16px;
+    font-size:.78rem; line-height:1.55; opacity:.7;
+  }
+  #login-status.error{ color:#d99; opacity:1; }
+
+  .back{
+    display:block; text-align:center; margin-top:22px;
+    font-size:.72rem; letter-spacing:.08em; text-transform:uppercase; opacity:.45;
+  }
+  .back:hover{ opacity:.9; }
+
+  @media (max-width:600px){
+    header{ padding:22px 24px; }
+    .wrap{ padding:20px 16px 60px; }
+    .card{ padding:26px 22px 24px; }
+  }
+</style>
+</head>
+<body>
+
+  <header>
+    <a href="/"><img src="/assets/img/lion-rock-logo.png" alt="Lion Rock"></a>
+  </header>
+
+  <div class="wrap">
+    <div class="card">
+
+      <h1>Admin</h1>
+      <p class="sub">Sign in to upload videos and edit properties.</p>
+
+      <form id="login-form">
+        <label for="email">Email</label>
+        <input type="email" id="email" autocomplete="username" required>
+
+        <label for="password">Password</label>
+        <input type="password" id="password" autocomplete="current-password" required>
+
+        <button type="submit" class="btn" id="login-btn">Sign in</button>
+      </form>
+
+      <p id="login-status"></p>
+      <a class="back" href="/">← Back to gallery</a>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/supabase-config.js"></script>
+  <script src="/assets/js/admin-auth.js"></script>
+  <script src="/manage/manage.js"></script>
+</body>
+</html>

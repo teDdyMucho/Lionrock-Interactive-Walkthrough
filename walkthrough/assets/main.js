@@ -96,114 +96,38 @@
     window.addEventListener('resize', fitHeaderNav);
     window.addEventListener('orientationchange', () => setTimeout(fitHeaderNav, 50));
 
-    // Ask before downloading ~40MB. Resolves once the viewer has chosen (or
-    // immediately, if the clips are already cached / caching isn't possible).
-    await offerOfflineDownload();
-
     await preloadAll();
     setupInitialStage();
     startScrubEngine();
     revealSite();
+
+    // Deliberately not awaited: caching happens after the walkthrough is
+    // already playing, so saving for offline never delays the first frame.
+    cacheInBackground(rooms.map((r) => r.video).filter(Boolean));
   }
 
-  /* ---------- Offline download prompt ---------- */
+  /* ---------- Automatic offline caching ---------- */
 
-  /* Shows a one-question yes/no before the walkthrough downloads anything.
-     Answering is remembered per property, so it's asked once, not every visit.
-     Always resolves — a declined or failed download just falls through to the
-     normal network loader. */
-  async function offerOfflineDownload() {
-    const cache = window.VideoCache;
-    const prompt = document.getElementById('cache-prompt');
-    if (!cache || !prompt || !cache.available()) return;
-
-    const urls = rooms.map((r) => r.video).filter(Boolean);
-    if (!urls.length) return;
-
-    // Already saved? Nothing to ask.
-    if (await cache.isCached(urls)) return;
-
-    const slug = new URLSearchParams(location.search).get('property') || '';
-    const askedKey = `lionrock-cache-asked:${slug}`;
+  /* No prompt here — consent is asked once on the gallery (welcome page).
+     If the viewer allowed it, every clip is written to Cache Storage in the
+     background, so the next visit loads from disk. Entirely best-effort: a
+     failure (quota, unsupported browser) never interrupts the walkthrough. */
+  function shouldCacheVideos() {
     try {
-      if (localStorage.getItem(askedKey)) return; // they already said no
-    } catch { /* storage blocked — just ask */ }
-
-    const sizeEl = document.getElementById('cache-size');
-    const noteEl = document.getElementById('cache-note');
-    const progress = document.getElementById('cache-progress');
-    const fill = document.getElementById('cache-bar-fill');
-    const label = document.getElementById('cache-progress-label');
-    const yes = document.getElementById('cache-yes');
-    const no = document.getElementById('cache-no');
-
-    // A HEAD per clip gives a real size instead of a guess.
-    estimateSize(urls).then((bytes) => {
-      if (bytes) sizeEl.textContent = `About ${formatBytes(bytes)} · ${urls.length} clips`;
-    });
-
-    // The loader's backdrop video is behind this prompt; pause it so two videos
-    // aren't decoding at once on a phone.
-    prompt.classList.add('show');
-
-    return new Promise((resolve) => {
-      const finish = () => {
-        prompt.classList.remove('show');
-        resolve();
-      };
-
-      no.addEventListener('click', () => {
-        try { localStorage.setItem(askedKey, 'no'); } catch { /* ignore */ }
-        finish();
-      }, { once: true });
-
-      yes.addEventListener('click', async () => {
-        yes.disabled = true;
-        no.disabled = true;
-        progress.classList.add('show');
-        noteEl.classList.remove('error');
-        noteEl.textContent = '';
-
-        await cache.requestPersistence();
-
-        try {
-          await cache.downloadToCache(urls, (p) => {
-            const pct = Math.round(p * 100);
-            fill.style.width = `${pct}%`;
-            label.textContent = `Downloading… ${pct}%`;
-          });
-          label.textContent = 'Saved to this device.';
-          try { localStorage.setItem(askedKey, 'yes'); } catch { /* ignore */ }
-          setTimeout(finish, 600);
-        } catch (err) {
-          // Quota/failure isn't fatal — the walkthrough still streams normally.
-          noteEl.textContent = `${err.message} Continuing online.`;
-          noteEl.classList.add('error');
-          progress.classList.remove('show');
-          setTimeout(finish, 2600);
-        }
-      }, { once: true });
-    });
-  }
-
-  async function estimateSize(urls) {
-    try {
-      const sizes = await Promise.all(
-        urls.map((u) =>
-          fetch(u, { method: 'HEAD' })
-            .then((r) => Number(r.headers.get('Content-Length')) || 0)
-            .catch(() => 0)
-        )
-      );
-      return sizes.reduce((a, b) => a + b, 0);
+      if (localStorage.getItem('lionrock-cache-consent') !== 'allow') return false;
     } catch {
-      return 0;
+      return false;
     }
+    return !!(window.VideoCache && window.VideoCache.available());
   }
 
-  function formatBytes(bytes) {
-    if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(1)}GB`;
-    return `${Math.round(bytes / 1024 / 1024)}MB`;
+  async function cacheInBackground(urls) {
+    if (!shouldCacheVideos() || !urls.length) return;
+    try {
+      await window.VideoCache.downloadToCache(urls);
+    } catch {
+      /* out of space / blocked — the walkthrough still works online */
+    }
   }
 
   /* Replaces the loader with a readable message. Without this the page sits on

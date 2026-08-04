@@ -38,9 +38,11 @@ const configured =
   !cfg.url.includes('YOUR-PROJECT-REF') &&
   !cfg.anonKey.includes('YOUR-ANON');
 
-const db = configured
-  ? window.supabase.createClient(cfg.url, cfg.anonKey)
-  : null;
+/* Reuse AdminAuth's client so uploads carry the signed-in session. A separate
+   client would send writes as anon, which migration 002 rejects. */
+const db = window.AdminAuth && window.AdminAuth.client
+  ? window.AdminAuth.client
+  : (configured ? window.supabase.createClient(cfg.url, cfg.anonKey) : null);
 
 /* selected file per area, keyed by area id */
 const staged = new Map();
