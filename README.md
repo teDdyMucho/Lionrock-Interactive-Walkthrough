@@ -257,10 +257,21 @@ uses `location.replace()`, so `/manage/` doesn't sit in history and Back can't
 bounce you into it. Visiting `/manage/` with a session already active redirects
 too.
 
-**There is no sign-out.** Once signed in, the session persists (supabase-js
-refreshes it), so an admin device stays signed in across reloads and restarts.
-To end a session, clear the site's data in browser settings — or delete/reset
-the user in the Supabase dashboard to revoke it everywhere.
+**Sign out** sits next to Upload/Edit in the gallery header (also admin-only,
+also hidden on phones). It opens a **"Sign out?" confirmation** first — the
+click alone doesn't end the session, since it's easy to hit by accident and
+costs a re-login. Cancel, Escape, or a backdrop click all dismiss it;
+confirming ends the session and returns to `/manage/` with a "Signed out."
+message.
+
+The redirect carries `?signedout=1`, which suppresses `/manage/`'s
+already-signed-in redirect for that one load — otherwise a just-cleared session
+that's still readable for a moment would bounce the user straight back to the
+gallery.
+
+Otherwise the session persists (supabase-js refreshes it), so an admin device
+stays signed in across reloads. To revoke access everywhere, delete or reset the
+user in the Supabase dashboard.
 
 The session is stored by supabase-js and shared across pages, so signing in at
 `/manage/` immediately reveals the button on the gallery — including in another

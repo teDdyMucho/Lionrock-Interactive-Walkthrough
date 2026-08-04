@@ -28,9 +28,21 @@
   }
 
   // Already signed in (session persists) — don't make them look at a login form.
-  window.AdminAuth.getUser().then((user) => {
-    if (user) goToGallery();
-  });
+  //
+  // ?signedout=1 suppresses this: arriving straight from the Sign out button,
+  // the local session can still be readable for a moment, and redirecting on it
+  // would bounce the user back to the gallery they just left.
+  const justSignedOut = new URLSearchParams(location.search).has('signedout');
+
+  if (justSignedOut) {
+    setStatus('Signed out.', false);
+    // Clean the URL so a later refresh behaves normally.
+    history.replaceState(null, '', '/manage/');
+  } else {
+    window.AdminAuth.getUser().then((user) => {
+      if (user) goToGallery();
+    });
+  }
 
   $('#login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
