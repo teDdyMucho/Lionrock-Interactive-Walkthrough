@@ -270,6 +270,53 @@ walkthrough/          one shared page, driven by ?property=<slug>
 Cards link to `/walkthrough/?property=<slug>`, and a property only appears once
 it has at least one uploaded video.
 
+### Save-for-offline prompt
+
+Opening a walkthrough asks once, before downloading anything: **"Save for
+offline?"** with the real size ("About 53MB · 8 clips") and a Yes/No.
+
+- **Yes** — every clip is stored in **Cache Storage** (`walkthrough/assets/video-cache.js`).
+  Revisits then load from disk instead of the network.
+- **No** — the walkthrough streams normally. The answer is remembered per
+  property in `localStorage`, so it isn't asked again.
+
+This is **browser storage, not the Downloads folder** — nothing appears in a
+file manager. Users can clear it from their browser's site-data settings.
+
+Measured on the sample property: first visit downloads 52.7MB, a revisit is
+ready in **0.4s with zero network requests for video**.
+
+Requires a secure context (https, or localhost) — `caches` is unavailable on
+plain http, and the prompt silently skips itself there. Quota errors are caught
+and reported, then the walkthrough continues online.
+
+**Caveat — not yet fully offline.** The clips are cached, but the page shell
+(HTML/CSS/JS) still comes from the network, so loading the URL with no
+connection fails. Making it truly offline needs a service worker to cache the
+shell as well; that isn't built yet.
+
+### Renaming and adding areas
+
+Step 2 of the upload modal is fully editable:
+
+- **Area names** — each slot's name is a text field. Renaming changes the nav
+  label on the walkthrough; it does **not** change the `area` slug, so an
+  existing upload is never orphaned by a rename.
+- **Add an area** — type a name and click **+ Add area**. The slug is derived
+  from the name and de-duplicated (`garage`, `garage-2`, …). Needs
+  `supabase/migrations/004-custom-areas.sql`, which relaxes `area` from a fixed
+  whitelist to a slug-shape check.
+- **Remove an area** — the `×` on each slot. Removing one that already has a
+  video asks first, then deletes its row.
+- **Property title / address** — editable at the top of step 2.
+
+The 8 defaults (Intro + 7 rooms) are just the starting point for a new
+property. Once a property has rows in `property_videos`, the modal loads its
+saved labels and custom areas instead.
+
+**Save & Upload** saves renames and title/address edits even when no file is
+staged, so it doubles as a plain Save.
+
 ### The Intro slot
 
 The upload modal has 8 slots: an optional **Intro** plus the 7 rooms. The intro

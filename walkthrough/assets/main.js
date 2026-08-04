@@ -96,10 +96,114 @@
     window.addEventListener('resize', fitHeaderNav);
     window.addEventListener('orientationchange', () => setTimeout(fitHeaderNav, 50));
 
+    // Ask before downloading ~40MB. Resolves once the viewer has chosen (or
+    // immediately, if the clips are already cached / caching isn't possible).
+    await offerOfflineDownload();
+
     await preloadAll();
     setupInitialStage();
     startScrubEngine();
     revealSite();
+  }
+
+  /* ---------- Offline download prompt ---------- */
+
+  /* Shows a one-question yes/no before the walkthrough downloads anything.
+     Answering is remembered per property, so it's asked once, not every visit.
+     Always resolves — a declined or failed download just falls through to the
+     normal network loader. */
+  async function offerOfflineDownload() {
+    const cache = window.VideoCache;
+    const prompt = document.getElementById('cache-prompt');
+    if (!cache || !prompt || !cache.available()) return;
+
+    const urls = rooms.map((r) => r.video).filter(Boolean);
+    if (!urls.length) return;
+
+    // Already saved? Nothing to ask.
+    if (await cache.isCached(urls)) return;
+
+    const slug = new URLSearchParams(location.search).get('property') || '';
+    const askedKey = `lionrock-cache-asked:${slug}`;
+    try {
+      if (localStorage.getItem(askedKey)) return; // they already said no
+    } catch { /* storage blocked — just ask */ }
+
+    const sizeEl = document.getElementById('cache-size');
+    const noteEl = document.getElementById('cache-note');
+    const progress = document.getElementById('cache-progress');
+    const fill = document.getElementById('cache-bar-fill');
+    const label = document.getElementById('cache-progress-label');
+    const yes = document.getElementById('cache-yes');
+    const no = document.getElementById('cache-no');
+
+    // A HEAD per clip gives a real size instead of a guess.
+    estimateSize(urls).then((bytes) => {
+      if (bytes) sizeEl.textContent = `About ${formatBytes(bytes)} · ${urls.length} clips`;
+    });
+
+    // The loader's backdrop video is behind this prompt; pause it so two videos
+    // aren't decoding at once on a phone.
+    prompt.classList.add('show');
+
+    return new Promise((resolve) => {
+      const finish = () => {
+        prompt.classList.remove('show');
+        resolve();
+      };
+
+      no.addEventListener('click', () => {
+        try { localStorage.setItem(askedKey, 'no'); } catch { /* ignore */ }
+        finish();
+      }, { once: true });
+
+      yes.addEventListener('click', async () => {
+        yes.disabled = true;
+        no.disabled = true;
+        progress.classList.add('show');
+        noteEl.classList.remove('error');
+        noteEl.textContent = '';
+
+        await cache.requestPersistence();
+
+        try {
+          await cache.downloadToCache(urls, (p) => {
+            const pct = Math.round(p * 100);
+            fill.style.width = `${pct}%`;
+            label.textContent = `Downloading… ${pct}%`;
+          });
+          label.textContent = 'Saved to this device.';
+          try { localStorage.setItem(askedKey, 'yes'); } catch { /* ignore */ }
+          setTimeout(finish, 600);
+        } catch (err) {
+          // Quota/failure isn't fatal — the walkthrough still streams normally.
+          noteEl.textContent = `${err.message} Continuing online.`;
+          noteEl.classList.add('error');
+          progress.classList.remove('show');
+          setTimeout(finish, 2600);
+        }
+      }, { once: true });
+    });
+  }
+
+  async function estimateSize(urls) {
+    try {
+      const sizes = await Promise.all(
+        urls.map((u) =>
+          fetch(u, { method: 'HEAD' })
+            .then((r) => Number(r.headers.get('Content-Length')) || 0)
+            .catch(() => 0)
+        )
+      );
+      return sizes.reduce((a, b) => a + b, 0);
+    } catch {
+      return 0;
+    }
+  }
+
+  function formatBytes(bytes) {
+    if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(1)}GB`;
+    return `${Math.round(bytes / 1024 / 1024)}MB`;
   }
 
   /* Replaces the loader with a readable message. Without this the page sits on
@@ -125,8 +229,18 @@
     // from introVideo, which would also add a hidden room to the timeline.
     const backdrop = property.loaderVideo || property.introVideo;
     if (backdrop) {
-      els.loaderVideo.src = backdrop;
-      els.loaderVideo.play().catch(() => {});
+      // Prefer the cached copy so a saved walkthrough needs no network at all.
+      const useSrc = (src) => {
+        els.loaderVideo.src = src;
+        els.loaderVideo.play().catch(() => {});
+      };
+      if (window.VideoCache && window.VideoCache.available()) {
+        window.VideoCache.blobUrlFromCache(backdrop)
+          .then((blobUrl) => useSrc(blobUrl || backdrop))
+          .catch(() => useSrc(backdrop));
+      } else {
+        useSrc(backdrop);
+      }
     }
   }
 
@@ -318,6 +432,25 @@
   }
 
   function fetchBlobWithProgress(url, onProgress) {
+    // A previously saved clip comes straight from Cache Storage — no network,
+    // works offline. Falls through to the normal fetch when it isn't stored.
+    return cachedBlobFirst(url, onProgress);
+  }
+
+  async function cachedBlobFirst(url, onProgress) {
+    if (window.VideoCache && window.VideoCache.available()) {
+      try {
+        const blobUrl = await window.VideoCache.blobUrlFromCache(url);
+        if (blobUrl) {
+          onProgress(1);
+          return blobUrl;
+        }
+      } catch { /* fall through to network */ }
+    }
+    return networkBlobWithProgress(url, onProgress);
+  }
+
+  function networkBlobWithProgress(url, onProgress) {
     return Promise.race([
       fetch(url).then(async (response) => {
         const contentLength = Number(response.headers.get('Content-Length')) || 0;

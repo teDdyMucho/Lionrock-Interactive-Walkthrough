@@ -25,6 +25,71 @@
     padding:12px 26px; border:1px solid rgba(245,243,238,.35);
   }
   #walkthrough-error a:hover{ border-color:rgba(245,243,238,.8); }
+
+  /* ---------- Offline download prompt (shown before the walkthrough loads) ---------- */
+  #cache-prompt{
+    position:fixed; inset:0; z-index:1300;
+    display:none; align-items:center; justify-content:center;
+    padding:24px;
+    background:#0c0c0c;
+  }
+  #cache-prompt.show{ display:flex; }
+
+  .cache-card{
+    width:min(430px,100%);
+    border:1px solid rgba(245,243,238,.18);
+    padding:32px 34px 28px;
+    text-align:center;
+  }
+  .cache-card h2{
+    font-family:'Playfair Display',serif;
+    font-weight:500; font-size:1.3rem;
+    margin-bottom:12px;
+  }
+  .cache-card p{
+    font-size:.85rem; line-height:1.65; opacity:.6;
+    margin-bottom:8px;
+  }
+  .cache-size{
+    font-size:.72rem; letter-spacing:.08em; text-transform:uppercase;
+    opacity:.45; margin-bottom:24px;
+  }
+
+  .cache-actions{
+    display:flex; gap:12px; justify-content:center; flex-wrap:wrap;
+  }
+  .cache-actions button{
+    flex:1 1 130px;
+    padding:13px 20px; cursor:pointer;
+    border:1px solid rgba(245,243,238,.3);
+    background:transparent; color:#f5f3ee;
+    font-family:'Inter',sans-serif;
+    font-size:.72rem; letter-spacing:.1em; text-transform:uppercase;
+    transition:border-color .2s ease, background .2s ease;
+  }
+  .cache-actions button:hover:not(:disabled){
+    border-color:rgba(245,243,238,.8); background:rgba(245,243,238,.06);
+  }
+  .cache-actions .yes{ background:#f5f3ee; color:#0c0c0c; border-color:#f5f3ee; }
+  .cache-actions .yes:hover:not(:disabled){ background:#fff; }
+  .cache-actions button:disabled{ opacity:.4; cursor:not-allowed; }
+
+  #cache-progress{ display:none; margin-top:22px; }
+  #cache-progress.show{ display:block; }
+  .cache-bar-track{ width:100%; height:2px; background:rgba(245,243,238,.2); }
+  .cache-bar-fill{ height:100%; width:0; background:#f5f3ee; transition:width .25s ease; }
+  #cache-progress-label{
+    margin-top:10px;
+    font-size:.72rem; letter-spacing:.08em; text-transform:uppercase; opacity:.7;
+  }
+
+  #cache-note{ margin-top:18px; font-size:.72rem; opacity:.45; }
+  #cache-note button{
+    background:none; border:none; padding:0; cursor:pointer;
+    color:#f5f3ee; font-family:'Inter',sans-serif; font-size:.72rem;
+    text-decoration:underline; text-underline-offset:3px; opacity:.8;
+  }
+  #cache-note.error{ color:#d99; opacity:1; }
 </style>
 </head>
 <body>
@@ -44,6 +109,27 @@
   <div id="walkthrough-error">
     <p id="walkthrough-error-text"></p>
     <a href="/">← Back to gallery</a>
+  </div>
+
+  <!-- Asked once, before the walkthrough loads -->
+  <div id="cache-prompt">
+    <div class="cache-card">
+      <h2>Save for offline?</h2>
+      <p>Keep this walkthrough on your device so it opens instantly next time and works without a connection.</p>
+      <div class="cache-size" id="cache-size"></div>
+
+      <div class="cache-actions">
+        <button type="button" class="yes" id="cache-yes">Yes, download</button>
+        <button type="button" id="cache-no">No thanks</button>
+      </div>
+
+      <div id="cache-progress">
+        <div class="cache-bar-track"><div class="cache-bar-fill" id="cache-bar-fill"></div></div>
+        <div id="cache-progress-label">Downloading… 0%</div>
+      </div>
+
+      <p id="cache-note"></p>
+    </div>
   </div>
 
   <!-- Header / navigation -->
@@ -79,6 +165,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/supabase-config.js"></script>
+  <script src="/walkthrough/assets/video-cache.js"></script>
   <script src="/walkthrough/assets/rooms-source.js"></script>
   <script src="/walkthrough/assets/main.js"></script>
 </body>

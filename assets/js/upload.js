@@ -8,23 +8,27 @@
  * property_id + area, so re-uploading an area replaces it).
  */
 
-/* The upload slots, in timeline order — mirrors the `area` check constraint in
-   supabase/schema.sql (see migration 003 for 'intro'). Adding one means
-   updating both.
+/* The DEFAULT slots a brand-new property starts with. They're only a starting
+   point — labels are editable, areas can be removed, and new ones added (see
+   migration 004, which relaxed `area` from a fixed whitelist to a slug check).
 
    The intro is optional and isn't a room: it plays first and sits behind the
-   loader, then the walkthrough continues into Exterior. Leave it empty and the
-   walkthrough just starts on Exterior. */
-const ROOM_AREAS = [
-  { area: 'intro',     label: 'Intro',      optional: true, sort: -1 },
-  { area: 'exterior',  label: 'Exterior',   sort: 0 },
-  { area: 'living',    label: 'Living',     sort: 1 },
-  { area: 'dining',    label: 'Dining',     sort: 2 },
-  { area: 'kitchen',   label: 'Kitchen',    sort: 3 },
-  { area: 'bedroom-1', label: 'Bedroom 1',  sort: 4 },
-  { area: 'bathroom',  label: 'Bathroom',   sort: 5 },
-  { area: 'bedroom-2', label: 'Bedroom 2',  sort: 6 },
+   loader, then the walkthrough continues into the first room. Leave it empty
+   and the walkthrough just starts on room 1. */
+const DEFAULT_AREAS = [
+  { area: 'intro',     label: 'Intro',     intro: true },
+  { area: 'exterior',  label: 'Exterior'  },
+  { area: 'living',    label: 'Living'    },
+  { area: 'dining',    label: 'Dining'    },
+  { area: 'kitchen',   label: 'Kitchen'   },
+  { area: 'bedroom-1', label: 'Bedroom 1' },
+  { area: 'bathroom',  label: 'Bathroom'  },
+  { area: 'bedroom-2', label: 'Bedroom 2' },
 ];
+
+/* The live, editable slot list for the property being uploaded to. Rebuilt from
+   DEFAULT_AREAS + whatever already exists in the DB each time step 2 opens. */
+let areaRows = [];
 
 const MAX_FILE_BYTES = 524288000; // 500MB — matches the bucket's file_size_limit
 
@@ -61,7 +65,10 @@ function closeModal() {
   staged.clear();
   selectedPropertyId = null;
   $('#new-property-form').classList.remove('open');
-  renderAreas();
+  // Areas are rebuilt per-property when step 2 opens, so just clear them.
+  areaRows = [];
+  $('#area-grid').innerHTML = '';
+  $('#new-area-name').value = '';
 }
 
 function showStep(n) {
@@ -168,26 +175,170 @@ async function createProperty() {
 
 /* ---------- step 2: the 7 areas ---------- */
 
+/* Builds the slot list for the selected property: the defaults, plus any area
+   already in the DB (with its saved label), so renames and custom rooms persist
+   between visits. */
+async function buildAreaRows() {
+  areaRows = DEFAULT_AREAS.map((d) => ({ ...d, existing: false, hasVideo: false }));
+
+  if (!db || !selectedPropertyId) return;
+
+  const { data, error } = await db
+    .from('property_videos')
+    .select('area, label, video_url, sort_order')
+    .eq('property_id', selectedPropertyId)
+    .order('sort_order');
+
+  if (error || !data) return;
+
+  data.forEach((row) => {
+    const match = areaRows.find((r) => r.area === row.area);
+    if (match) {
+      match.label = row.label || match.label;   // saved rename wins
+      match.existing = true;
+      match.hasVideo = !!row.video_url;
+    } else {
+      areaRows.push({
+        area: row.area,
+        label: row.label || row.area,
+        intro: row.area === 'intro',
+        existing: true,
+        hasVideo: !!row.video_url,
+        sort: row.sort_order,
+      });
+    }
+  });
+
+  // Keep DB order for rows that have one; new defaults fall in after.
+  areaRows.sort((a, b) => orderOf(a) - orderOf(b));
+}
+
+function orderOf(row) {
+  if (row.intro) return -1;
+  if (typeof row.sort === 'number') return row.sort;
+  return DEFAULT_AREAS.findIndex((d) => d.area === row.area);
+}
+
 function renderAreas() {
-  $('#area-grid').innerHTML = ROOM_AREAS.map(
-    (r) => `
-    <div class="area-slot${r.optional ? ' optional' : ''}" data-area="${r.area}">
-      <div class="area-label">${r.label}${r.optional ? '<span class="area-opt">optional</span>' : ''}</div>
+  const grid = $('#area-grid');
+
+  grid.innerHTML = areaRows.map((r, i) => `
+    <div class="area-slot${r.intro ? ' optional' : ''}" data-area="${escapeHtml(r.area)}" data-index="${i}">
+      <div class="area-label">
+        <input class="area-name" type="text" value="${escapeHtml(r.label)}"
+               aria-label="Area name" ${r.intro ? 'readonly' : ''}>
+        ${r.intro ? '<span class="area-opt">optional</span>' : ''}
+        ${r.intro ? '' : '<button class="area-remove" title="Remove this area" aria-label="Remove">&times;</button>'}
+      </div>
       <label class="area-drop">
         <input type="file" accept="video/mp4,video/quicktime,video/webm" hidden>
-        <span class="area-hint">Choose or drop a video</span>
+        <span class="area-hint">${r.hasVideo ? 'Uploaded — choose a file to replace' : 'Choose or drop a video'}</span>
       </label>
       <div class="area-progress"><div class="area-progress-fill"></div></div>
     </div>`
   ).join('');
 
-  $('#area-grid').querySelectorAll('.area-slot').forEach(wireSlot);
+  grid.querySelectorAll('.area-slot').forEach(wireSlot);
+}
+
+/* Renaming only changes the display label; `area` (the storage path + row key)
+   stays fixed so an existing upload isn't orphaned by a rename. */
+function wireAreaName(slot, row) {
+  const input = slot.querySelector('.area-name');
+  if (!input || row.intro) return;
+
+  input.addEventListener('input', () => { row.label = input.value; });
+  input.addEventListener('blur', () => {
+    const clean = input.value.trim();
+    row.label = clean || row.area;
+    input.value = row.label;
+  });
+  // Typing in the name field shouldn't open the file picker.
+  input.addEventListener('click', (e) => e.stopPropagation());
+}
+
+function wireAreaRemove(slot, row) {
+  const btn = slot.querySelector('.area-remove');
+  if (!btn) return;
+
+  btn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (row.existing && row.hasVideo) {
+      const ok = confirm(
+        `Remove "${row.label}"? Its uploaded video will be deleted from this walkthrough.`
+      );
+      if (!ok) return;
+      await deleteArea(row);
+    }
+
+    staged.delete(row.area);
+    areaRows = areaRows.filter((r) => r !== row);
+    renderAreas();
+    $('#start-upload').disabled = staged.size === 0;
+  });
+}
+
+async function deleteArea(row) {
+  if (!db || !selectedPropertyId) return;
+  const { error } = await db
+    .from('property_videos')
+    .delete()
+    .eq('property_id', selectedPropertyId)
+    .eq('area', row.area);
+  if (error) setStatus(explainError(error, `remove ${row.label}`), true);
+}
+
+function addArea() {
+  const name = ($('#new-area-name').value || '').trim();
+  if (!name) return;
+
+  const base = slugify(name);
+  if (!base) {
+    setStatus('Give the area a name using letters or numbers.', true);
+    return;
+  }
+
+  // `area` has to stay unique per property — it's the row key and storage path.
+  let slug = base;
+  let n = 2;
+  while (areaRows.some((r) => r.area === slug)) slug = `${base}-${n++}`;
+
+  areaRows.push({
+    area: slug,
+    label: name,
+    existing: false,
+    hasVideo: false,
+    sort: Math.max(0, ...areaRows.map(orderOf)) + 1,
+  });
+
+  $('#new-area-name').value = '';
+  setStatus('', false);
+  renderAreas();
+}
+
+function slugify(str) {
+  return str
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 48);
 }
 
 function wireSlot(slot) {
   const area = slot.dataset.area;
+  const row = areaRows[Number(slot.dataset.index)];
   const input = slot.querySelector('input[type=file]');
   const drop = slot.querySelector('.area-drop');
+
+  if (row) {
+    wireAreaName(slot, row);
+    wireAreaRemove(slot, row);
+    // Re-show a file staged before the last re-render.
+    const pending = staged.get(area);
+    if (pending) setSlotState(slot, 'staged', `${pending.name} · ${formatSize(pending.size)}`);
+  }
 
   input.addEventListener('change', () => {
     if (input.files[0]) stageFile(slot, area, input.files[0]);
@@ -238,18 +389,34 @@ function setSlotProgress(slot, pct) {
 /* ---------- upload ---------- */
 
 async function startUpload() {
-  if (!db || !selectedPropertyId || staged.size === 0) return;
+  if (!db || !selectedPropertyId) return;
 
   const property = properties.find((p) => p.id === selectedPropertyId);
   $('#start-upload').disabled = true;
   $('#back-to-property').disabled = true;
+
+  // Renames and title/address edits are worth saving even with nothing staged,
+  // so "Save & Upload" is useful as a plain Save too.
+  await savePropertyDetails();
+  const renamed = await saveRenames();
+
+  if (staged.size === 0) {
+    $('#start-upload').disabled = false;
+    $('#back-to-property').disabled = false;
+    setStatus(
+      renamed ? 'Saved.' : 'Nothing to upload — add a video to a slot first.',
+      !renamed
+    );
+    return;
+  }
 
   let done = 0;
   let failed = 0;
 
   for (const [area, file] of staged) {
     const slot = $(`.area-slot[data-area="${area}"]`);
-    const meta = ROOM_AREAS.find((r) => r.area === area);
+    const meta = areaRows.find((r) => r.area === area);
+    if (!slot || !meta) continue; // area was removed after staging
 
     setSlotState(slot, 'uploading', `Uploading ${file.name}…`);
     setSlotProgress(slot, 0);
@@ -280,7 +447,7 @@ async function startUpload() {
         label: meta.label,
         video_url: pub.publicUrl,
         storage_path: path,
-        sort_order: meta.sort,
+        sort_order: orderOf(meta),
       },
       { onConflict: 'property_id,area' }
     );
@@ -303,6 +470,54 @@ async function startUpload() {
       : `${done} video${done === 1 ? '' : 's'} uploaded to ${property.title}.`,
     failed > 0
   );
+}
+
+/* Persists label changes for areas that already exist in the DB. Areas with no
+   row yet get their label written when their video uploads. */
+async function saveRenames() {
+  if (!db || !selectedPropertyId) return false;
+
+  const edits = areaRows.filter((r) => r.existing);
+  if (!edits.length) return false;
+
+  let changed = false;
+  for (const row of edits) {
+    const { error } = await db
+      .from('property_videos')
+      .update({ label: row.label, sort_order: orderOf(row) })
+      .eq('property_id', selectedPropertyId)
+      .eq('area', row.area);
+    if (error) {
+      setStatus(explainError(error, `rename ${row.area}`), true);
+      return false;
+    }
+    changed = true;
+  }
+  return changed;
+}
+
+/* Saves the property title/address edited at the top of step 2. */
+async function savePropertyDetails() {
+  if (!db || !selectedPropertyId) return;
+
+  const title = ($('#edit-title').value || '').trim();
+  const address = ($('#edit-address').value || '').trim();
+  const current = properties.find((p) => p.id === selectedPropertyId);
+  if (!current || !title) return;
+  if (title === current.title && address === (current.address || '')) return;
+
+  const { error } = await db
+    .from('properties')
+    .update({ title, address })
+    .eq('id', selectedPropertyId);
+
+  if (error) {
+    setStatus(explainError(error, 'save the property details'), true);
+    return;
+  }
+
+  current.title = title;
+  current.address = address;
 }
 
 /* ---------- helpers ---------- */
@@ -355,8 +570,6 @@ function escapeHtml(str) {
 /* ---------- wiring ---------- */
 
 document.addEventListener('DOMContentLoaded', () => {
-  renderAreas();
-
   $('#upload-btn').addEventListener('click', openModal);
   $('#upload-close').addEventListener('click', closeModal);
   $('#upload-modal').addEventListener('click', (e) => {
@@ -366,13 +579,22 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Escape' && $('#upload-modal').classList.contains('open')) closeModal();
   });
 
-  $('#to-areas').addEventListener('click', () => {
+  $('#to-areas').addEventListener('click', async () => {
     const p = properties.find((x) => x.id === selectedPropertyId);
-    $('#areas-for').textContent = p ? `${p.title} — ${p.address || p.slug}` : '';
-    setStatus('', false);
+    $('#edit-title').value = p ? p.title : '';
+    $('#edit-address').value = p ? (p.address || '') : '';
+    setStatus('Loading areas…', false);
     showStep(2);
+    await buildAreaRows();   // pulls saved labels + custom areas
+    renderAreas();
+    setStatus('', false);
   });
   $('#back-to-property').addEventListener('click', () => showStep(1));
+
+  $('#add-area').addEventListener('click', addArea);
+  $('#new-area-name').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addArea(); }
+  });
 
   $('#show-new-property').addEventListener('click', () => {
     $('#new-property-form').classList.toggle('open');
