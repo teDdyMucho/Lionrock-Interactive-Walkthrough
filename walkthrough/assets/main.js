@@ -483,7 +483,102 @@
       els.loaderVideo.pause();
       els.loader.style.display = 'none';
       maybeShowFullscreenModal();
+      // On touch the fullscreen prompt owns the first tap, so the guide waits
+      // for it rather than stacking two overlays.
+      if (!els.fullscreenModal.classList.contains('visible')) maybeShowGuide();
     }, 650);
+  }
+
+  // ---------- First-visit guide ----------
+
+  const GUIDE_SEEN_KEY = 'lionrock-guide-seen';
+
+  /* Four steps: scrub forward, scrub back, jump via the nav, return to the
+     gallery. Shown once per browser — a walkthrough people revisit shouldn't
+     re-explain itself every time. */
+  function maybeShowGuide() {
+    const guide = document.getElementById('guide');
+    if (!guide) return;
+
+    try {
+      if (localStorage.getItem(GUIDE_SEEN_KEY)) return;
+    } catch { /* storage blocked — still worth showing once */ }
+
+    // Wording differs by input: you swipe a phone, you scroll a desktop.
+    document.getElementById('guide-text-0').textContent =
+      IS_TOUCH_DEVICE ? 'Swipe Down to Continue' : 'Scroll Down to Continue';
+    document.getElementById('guide-text-1').textContent =
+      IS_TOUCH_DEVICE ? 'Swipe Up to Return' : 'Scroll Up to Return';
+    document.getElementById('guide-hint').textContent =
+      IS_TOUCH_DEVICE ? 'Tap anywhere to continue' : 'Click anywhere to continue';
+
+    const steps = [...guide.querySelectorAll('.guide-step')];
+    let index = 0;
+
+    const show = (i) => {
+      steps.forEach((s, n) => s.classList.toggle('active', n === i));
+      // The pointer steps have to line up with real header elements, whose
+      // positions depend on the rendered nav — so measure, don't hardcode.
+      if (i === 2) anchorTo(steps[2], els.nav.querySelector('a:nth-child(2)'));
+      if (i === 3) anchorTo(steps[3], els.backToGallery);
+    };
+
+    const advance = () => {
+      index += 1;
+      if (index >= steps.length) {
+        guide.classList.remove('show');
+        document.body.classList.remove('guide-open');
+        try { localStorage.setItem(GUIDE_SEEN_KEY, '1'); } catch { /* ignore */ }
+        return;
+      }
+      show(index);
+    };
+
+    guide.addEventListener('click', advance);
+    guide.addEventListener('touchend', (e) => { e.preventDefault(); advance(); });
+
+    // Scrolling/swiping while the guide is up would scrub the video behind it.
+    // Swallow the gesture and advance instead, so the action being taught is
+    // also the action that moves the guide along. Throttled because one flick
+    // of a wheel fires dozens of events and would blow through every step.
+    let gestureLocked = false;
+    const onGuideGesture = (e) => {
+      e.preventDefault();
+      if (gestureLocked) return;
+      gestureLocked = true;
+      setTimeout(() => { gestureLocked = false; }, 700);
+      advance();
+    };
+    guide.addEventListener('wheel', onGuideGesture, { passive: false });
+    guide.addEventListener('touchmove', onGuideGesture, { passive: false });
+
+    show(0);
+    guide.classList.add('show');
+    document.body.classList.add('guide-open');
+  }
+
+  /* Draws the ring around the element being described and centres the label
+     under it. The ring is sized from the target rather than fixed, so it hugs
+     a short label ("Living") and a long one ("← Gallery") equally well. */
+  function anchorTo(step, target) {
+    if (!target) return;
+
+    const r = target.getBoundingClientRect();
+    const ring = step.querySelector('.guide-ring');
+
+    const ringW = r.width + 26;
+    const ringH = r.height + 14;
+    if (ring) {
+      ring.style.width = `${ringW}px`;
+      ring.style.height = `${ringH}px`;
+    }
+
+    // The step is a centred column, so give it the ring's width and place it
+    // so the ring lands exactly over the target.
+    step.style.width = `${ringW}px`;
+    step.style.left = `${r.left + r.width / 2 - ringW / 2}px`;
+    step.style.top = `${r.top + r.height / 2 - ringH / 2}px`;
+    step.style.transform = 'none';
   }
 
   // Fullscreen can only be requested from within a real tap/click, so on touch
@@ -503,6 +598,7 @@
       request.call(el).catch(() => {});
     }
     els.fullscreenModal.classList.remove('visible');
+    maybeShowGuide(); // deferred until the fullscreen prompt is out of the way
   });
 
   // ---------- Scroll-scrub engine ----------

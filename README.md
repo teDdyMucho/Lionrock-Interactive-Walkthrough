@@ -375,6 +375,36 @@ saved labels and custom areas instead.
 **Save & Upload** saves renames and title/address edits even when no file is
 staged, so it doubles as a plain Save.
 
+### First-visit guide
+
+The first time someone opens a walkthrough, a four-step overlay explains the
+controls, advanced by clicking/tapping (or by scrolling/swiping — the gesture
+being taught also moves the guide along):
+
+1. Scroll/Swipe **Down** to Continue
+2. Scroll/Swipe **Up** to Return
+3. Click to instantly go to this Room — ring drawn around a nav item
+4. Click to return to Gallery — ring drawn around **← Gallery**
+
+Wording follows the input: *Scroll* on desktop, *Swipe* on touch, keyed off the
+same `IS_TOUCH_DEVICE` check the scrub engine uses.
+
+Shown **once per browser** (`lionrock-guide-seen` in `localStorage`) — a
+walkthrough people revisit shouldn't re-explain itself every time. Clear that
+key to see it again.
+
+Implementation notes:
+- The guide sits at `z-index: 95`, *below* the header (100), so the controls
+  steps 3–4 point at stay sharp above the blur. Because that leaves them
+  clickable, `body.guide-open` disables header pointer events while it's up.
+- Rings are sized and positioned from the target's `getBoundingClientRect()` at
+  display time, so they hug a short label ("Living") and a long one
+  ("← Gallery") equally well and survive nav re-layout.
+- On touch the fullscreen prompt claims the first tap, so the guide waits and
+  starts when that's dismissed rather than stacking two overlays.
+- Wheel/touchmove are throttled (700 ms) — one flick fires dozens of events and
+  would otherwise blow through all four steps at once.
+
 ### The Intro slot
 
 The upload modal has 8 slots: an optional **Intro** plus the 7 rooms. The intro
