@@ -364,9 +364,20 @@ Step 2 of the upload modal is fully editable:
   from the name and de-duplicated (`garage`, `garage-2`, …). Needs
   `supabase/migrations/004-custom-areas.sql`, which relaxes `area` from a fixed
   whitelist to a slug-shape check.
+- **Reorder areas** — drag a slot by its `⠿` handle onto another to move it
+  there. Order is the list's own order; `sort_order` is written from it on save.
+  The intro isn't draggable — it always plays first.
 - **Remove an area** — the `×` on each slot. Removing one that already has a
   video asks first, then deletes its row.
 - **Property title / address** — editable at the top of step 2.
+- **Delete a unit** — the `×` on a property in step 1. Requires typing the
+  unit's name to confirm. Deletes the property (its `property_videos` rows go
+  with it via `ON DELETE CASCADE`) *and* its files in Storage, which Postgres
+  doesn't manage and would otherwise be left orphaned and still public.
+
+Saving uses an **upsert**, not an update: an area that has never had a video
+has no row yet, and an UPDATE would silently match nothing. That was a real bug
+— renames appeared to work but never reached the database.
 
 The 8 defaults (Intro + 7 rooms) are just the starting point for a new
 property. Once a property has rows in `property_videos`, the modal loads its
@@ -404,6 +415,17 @@ Implementation notes:
   starts when that's dismissed rather than stacking two overlays.
 - Wheel/touchmove are throttled (700 ms) — one flick fires dozens of events and
   would otherwise blow through all four steps at once.
+
+### Sharing a walkthrough
+
+Each gallery thumbnail has a **share** button (top-right, appears on hover;
+always visible on touch). It opens the native share sheet where one exists
+(phones) and otherwise copies the walkthrough URL with a brief "Copied"
+confirmation. The card is a link, so the button stops the click from opening
+the walkthrough.
+
+Clipboard access needs a secure context; on plain http it falls back to a
+selectable prompt.
 
 ### The Intro slot
 

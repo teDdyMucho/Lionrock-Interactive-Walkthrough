@@ -99,8 +99,71 @@
     sub.className = 'card-sub';
     sub.textContent = property.address || '';
 
+    thumb.appendChild(buildShareButton(property, card.href));
+
     card.append(thumb, title, sub);
     return card;
+  }
+
+  /* Share lives inside the thumb, over the video. The card is an <a>, so the
+     button has to stop the click from navigating into the walkthrough. */
+  function buildShareButton(property, href) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'share-btn';
+    btn.title = 'Share this walkthrough';
+    btn.setAttribute('aria-label', `Share ${property.title}`);
+    btn.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="18" cy="5" r="3"></circle>
+        <circle cx="6" cy="12" r="3"></circle>
+        <circle cx="18" cy="19" r="3"></circle>
+        <line x1="8.6" y1="10.5" x2="15.4" y2="6.5"></line>
+        <line x1="8.6" y1="13.5" x2="15.4" y2="17.5"></line>
+      </svg>`;
+
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();   // don't open the walkthrough
+      e.stopPropagation();
+
+      const url = new URL(href, location.origin).href;
+      const shareData = {
+        title: `${property.title} — Lion Rock`,
+        text: property.address ? `${property.title} · ${property.address}` : property.title,
+        url,
+      };
+
+      // Native share sheet where it exists (phones); clipboard everywhere else.
+      if (navigator.share) {
+        try {
+          await navigator.share(shareData);
+          return;
+        } catch (err) {
+          // AbortError just means they dismissed the sheet — not a failure.
+          if (err && err.name === 'AbortError') return;
+        }
+      }
+
+      try {
+        await navigator.clipboard.writeText(url);
+        flash(btn, 'Copied');
+      } catch {
+        // Clipboard needs a secure context; fall back to a selectable prompt.
+        window.prompt('Copy this link:', url);
+      }
+    });
+
+    return btn;
+  }
+
+  /* Brief confirmation label next to the button. */
+  function flash(btn, message) {
+    const note = document.createElement('span');
+    note.className = 'share-note';
+    note.textContent = message;
+    btn.insertAdjacentElement('afterend', note);
+    setTimeout(() => note.remove(), 1600);
   }
 })();
 

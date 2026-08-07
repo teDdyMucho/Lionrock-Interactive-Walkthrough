@@ -116,10 +116,14 @@ async function loadProperties() {
   list.innerHTML = properties
     .map(
       (p) => `
-      <button class="property-option" data-id="${p.id}">
-        <span class="property-name">${escapeHtml(p.title)}</span>
-        <span class="property-address">${escapeHtml(p.address || p.slug)}</span>
-      </button>`
+      <div class="property-row">
+        <button class="property-option" data-id="${p.id}">
+          <span class="property-name">${escapeHtml(p.title)}</span>
+          <span class="property-address">${escapeHtml(p.address || p.slug)}</span>
+        </button>
+        <button class="property-delete" data-id="${p.id}"
+                title="Delete this unit" aria-label="Delete ${escapeHtml(p.title)}">&times;</button>
+      </div>`
     )
     .join('');
 
@@ -131,6 +135,61 @@ async function loadProperties() {
       $('#to-areas').disabled = false;
     });
   });
+
+  list.querySelectorAll('.property-delete').forEach((btn) => {
+    btn.addEventListener('click', () => deleteProperty(btn.dataset.id));
+  });
+}
+
+/* Deletes a unit, its video rows, and its files in Storage.
+   `property_videos` has ON DELETE CASCADE, so the rows go with the property —
+   but Storage objects are not managed by Postgres and would be orphaned
+   (still billed, still publicly reachable), so they're removed explicitly. */
+async function deleteProperty(id) {
+  const property = properties.find((p) => p.id === id);
+  if (!property || !db) return;
+
+  const typed = prompt(
+    `Delete "${property.title}" and all of its videos?\n\n` +
+    `This can't be undone. Type the unit name to confirm:`
+  );
+  if (typed === null) return;                       // cancelled
+  if (typed.trim() !== property.title.trim()) {
+    setPropertyStatus('Name didn\'t match — nothing was deleted.', true);
+    return;
+  }
+
+  setPropertyStatus(`Deleting "${property.title}"…`, false);
+
+  // Collect storage paths before the rows disappear.
+  const { data: vids } = await db
+    .from('property_videos')
+    .select('storage_path')
+    .eq('property_id', id);
+
+  const paths = (vids || []).map((v) => v.storage_path).filter(Boolean);
+  if (paths.length) {
+    const { error: rmErr } = await db.storage
+      .from(cfg.bucket || 'walkthrough-videos')
+      .remove(paths);
+    // A storage failure shouldn't block the delete — report it and continue,
+    // otherwise the unit is stuck undeletable.
+    if (rmErr) console.warn('Some video files could not be removed:', rmErr.message);
+  }
+
+  const { error } = await db.from('properties').delete().eq('id', id);
+  if (error) {
+    setPropertyStatus(explainError(error, 'delete the unit'), true);
+    return;
+  }
+
+  if (selectedPropertyId === id) {
+    selectedPropertyId = null;
+    $('#to-areas').disabled = true;
+  }
+
+  await loadProperties();
+  setPropertyStatus(`Deleted "${property.title}".`, false);
 }
 
 async function createProperty() {
@@ -199,6 +258,7 @@ async function buildAreaRows() {
       match.label = row.label || match.label;   // saved rename wins
       match.existing = true;
       match.hasVideo = !!row.video_url;
+      match.savedSort = row.sort_order;
     } else {
       areaRows.push({
         area: row.area,
@@ -206,27 +266,41 @@ async function buildAreaRows() {
         intro: row.area === 'intro',
         existing: true,
         hasVideo: !!row.video_url,
-        sort: row.sort_order,
+        savedSort: row.sort_order,
       });
     }
   });
 
-  // Keep DB order for rows that have one; new defaults fall in after.
-  areaRows.sort((a, b) => orderOf(a) - orderOf(b));
+  // Restore the saved order. Defaults with no row yet keep their listed
+  // position, falling in after anything the DB has an explicit order for.
+  // (Uses savedSort, not orderOf — orderOf reads array position, which is what
+  // this sort is deciding.)
+  areaRows.sort((a, b) => savedOrderOf(a) - savedOrderOf(b));
 }
 
+function savedOrderOf(row) {
+  if (row.intro) return -Infinity;              // intro always first
+  if (typeof row.savedSort === 'number') return row.savedSort;
+  return DEFAULT_AREAS.findIndex((d) => d.area === row.area);
+}
+
+/* Order is the row's position in areaRows — dragging reorders that array, so
+   the list itself is the source of truth. The intro always sorts to -1 so it
+   stays ahead of every room regardless of where it sits in the list. */
 function orderOf(row) {
   if (row.intro) return -1;
-  if (typeof row.sort === 'number') return row.sort;
-  return DEFAULT_AREAS.findIndex((d) => d.area === row.area);
+  const i = areaRows.indexOf(row);
+  return i === -1 ? 0 : i;
 }
 
 function renderAreas() {
   const grid = $('#area-grid');
 
   grid.innerHTML = areaRows.map((r, i) => `
-    <div class="area-slot${r.intro ? ' optional' : ''}" data-area="${escapeHtml(r.area)}" data-index="${i}">
+    <div class="area-slot${r.intro ? ' optional' : ''}" data-area="${escapeHtml(r.area)}" data-index="${i}"
+         ${r.intro ? '' : 'draggable="true"'}>
       <div class="area-label">
+        ${r.intro ? '' : '<span class="area-drag" title="Drag to reorder" aria-hidden="true">⠿</span>'}
         <input class="area-name" type="text" value="${escapeHtml(r.label)}"
                aria-label="Area name" ${r.intro ? 'readonly' : ''}>
         ${r.intro ? '<span class="area-opt">optional</span>' : ''}
@@ -241,6 +315,64 @@ function renderAreas() {
   ).join('');
 
   grid.querySelectorAll('.area-slot').forEach(wireSlot);
+  wireDragReorder(grid);
+}
+
+/* Drag a slot onto another to move it there. The intro isn't draggable and
+   can't be displaced — it always plays first. */
+function wireDragReorder(grid) {
+  let dragArea = null;
+
+  grid.querySelectorAll('.area-slot[draggable="true"]').forEach((slot) => {
+    // Only the handle starts a drag — otherwise selecting text in the name
+    // field drags the whole card instead.
+    const handle = slot.querySelector('.area-drag');
+    let fromHandle = false;
+    if (handle) {
+      handle.addEventListener('mousedown', () => { fromHandle = true; });
+      slot.addEventListener('mouseup', () => { fromHandle = false; });
+    }
+
+    slot.addEventListener('dragstart', (e) => {
+      if (!fromHandle) { e.preventDefault(); return; }
+      dragArea = slot.dataset.area;
+      slot.classList.add('dragging-slot');
+      e.dataTransfer.effectAllowed = 'move';
+      // Firefox won't start a drag without data set.
+      e.dataTransfer.setData('text/plain', dragArea);
+    });
+
+    slot.addEventListener('dragend', () => {
+      slot.classList.remove('dragging-slot');
+      grid.querySelectorAll('.area-slot').forEach((s) => s.classList.remove('drop-target'));
+      dragArea = null;
+      fromHandle = false;
+    });
+
+    slot.addEventListener('dragover', (e) => {
+      if (!dragArea || slot.dataset.area === dragArea) return;
+      e.preventDefault();                   // required to allow a drop
+      e.dataTransfer.dropEffect = 'move';
+      slot.classList.add('drop-target');
+    });
+
+    slot.addEventListener('dragleave', () => slot.classList.remove('drop-target'));
+
+    slot.addEventListener('drop', (e) => {
+      e.preventDefault();
+      slot.classList.remove('drop-target');
+
+      const from = areaRows.findIndex((r) => r.area === dragArea);
+      const to = areaRows.findIndex((r) => r.area === slot.dataset.area);
+      if (from === -1 || to === -1 || from === to) return;
+
+      const [moved] = areaRows.splice(from, 1);
+      areaRows.splice(to, 0, moved);
+
+      renderAreas();                        // re-render in the new order
+      setStatus('Order changed — press Save & Upload to keep it.', false);
+    });
+  });
 }
 
 /* Renaming only changes the display label; `area` (the storage path + row key)
@@ -307,13 +439,9 @@ function addArea() {
   let n = 2;
   while (areaRows.some((r) => r.area === slug)) slug = `${base}-${n++}`;
 
-  areaRows.push({
-    area: slug,
-    label: name,
-    existing: false,
-    hasVideo: false,
-    sort: Math.max(0, ...areaRows.map(orderOf)) + 1,
-  });
+  // Appends to the end; position (and therefore sort_order) is whatever the
+  // list says after any dragging.
+  areaRows.push({ area: slug, label: name, existing: false, hasVideo: false });
 
   $('#new-area-name').value = '';
   setStatus('', false);
@@ -375,7 +503,10 @@ function stageFile(slot, area, file) {
   }
   staged.set(area, file);
   setSlotState(slot, 'staged', `${file.name} · ${formatSize(file.size)}`);
-  $('#start-upload').disabled = staged.size === 0;
+  // Save is never gated on a staged file — renames, reorders and title/address
+  // edits are all savable on their own. (Bug: this used to disable the button
+  // whenever nothing was staged, so a rename-only edit couldn't be saved.)
+  $('#start-upload').disabled = false;
 }
 
 function setSlotState(slot, state, text) {
@@ -478,24 +609,31 @@ async function startUpload() {
    row yet get their label written when their video uploads. */
 async function saveRenames() {
   if (!db || !selectedPropertyId) return false;
+  if (!areaRows.length) return false;
 
-  const edits = areaRows.filter((r) => r.existing);
-  if (!edits.length) return false;
+  // Upsert rather than update: a renamed/reordered area that has never had a
+  // video uploaded has no row yet, and an UPDATE would silently match nothing.
+  // That was the "edits don't save" bug — the rename looked accepted but never
+  // reached the database.
+  const rows = areaRows.map((row) => ({
+    property_id: selectedPropertyId,
+    area: row.area,
+    label: row.label,
+    sort_order: orderOf(row),
+  }));
 
-  let changed = false;
-  for (const row of edits) {
-    const { error } = await db
-      .from('property_videos')
-      .update({ label: row.label, sort_order: orderOf(row) })
-      .eq('property_id', selectedPropertyId)
-      .eq('area', row.area);
-    if (error) {
-      setStatus(explainError(error, `rename ${row.area}`), true);
-      return false;
-    }
-    changed = true;
+  const { error } = await db
+    .from('property_videos')
+    .upsert(rows, { onConflict: 'property_id,area' });
+
+  if (error) {
+    setStatus(explainError(error, 'save your changes'), true);
+    return false;
   }
-  return changed;
+
+  // Rows now exist for every slot, so later saves update in place.
+  areaRows.forEach((r) => { r.existing = true; });
+  return true;
 }
 
 /* Saves the property title/address edited at the top of step 2. */
