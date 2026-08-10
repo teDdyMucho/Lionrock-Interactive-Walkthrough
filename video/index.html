@@ -51,8 +51,10 @@
 </head>
 <body>
 
+  <!-- Plain black while downloading: playing a room clip behind the progress
+       bar spoils the walkthrough before it has finished loading, and decodes a
+       video the viewer isn't watching yet. -->
   <div id="loader">
-    <video id="loader-video" muted loop playsinline autoplay></video>
     <div class="loader-overlay">
       <div class="loader-brand">Lion Rock</div>
       <div class="loader-bar-track">

@@ -19,7 +19,6 @@
 
   const els = {
     loader: document.getElementById('loader'),
-    loaderVideo: document.getElementById('loader-video'),
     loaderFill: document.getElementById('loader-bar-fill'),
     loaderLabel: document.getElementById('loader-label'),
     nav: document.getElementById('room-nav'),
@@ -79,10 +78,7 @@
 
   function applyChrome(property) {
     els.footerNote.textContent = property.footerNote || '';
-    if (property.loaderVideo) {
-      els.loaderVideo.src = property.loaderVideo;
-      els.loaderVideo.play().catch(() => {});
-    }
+    // No loader backdrop — the download screen stays black on purpose.
     document.title = `${property.title} — Lion Rock`;
   }
 
@@ -528,10 +524,7 @@
 
   function revealSite() {
     els.loader.classList.add('hidden');
-    setTimeout(() => {
-      els.loaderVideo.pause();
-      els.loader.style.display = 'none';
-    }, 650);
+    setTimeout(() => { els.loader.style.display = 'none'; }, 650);
   }
 
   function showError(err) {

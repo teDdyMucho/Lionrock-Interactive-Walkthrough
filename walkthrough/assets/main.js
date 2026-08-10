@@ -36,7 +36,6 @@
 
   const els = {
     loader: document.getElementById('loader'),
-    loaderVideo: document.getElementById('loader-video'),
     loaderFill: document.getElementById('loader-bar-fill'),
     loaderLabel: document.getElementById('loader-label'),
     header: document.getElementById('site-header'),
@@ -144,23 +143,7 @@
   function applyPropertyChrome(property) {
     if (property.logoLink) els.brandLink.href = property.logoLink;
     els.footerNote.textContent = property.footerNote || '';
-    // loaderVideo is purely the backdrop behind the progress bar. It's separate
-    // from introVideo, which would also add a hidden room to the timeline.
-    const backdrop = property.loaderVideo || property.introVideo;
-    if (backdrop) {
-      // Prefer the cached copy so a saved walkthrough needs no network at all.
-      const useSrc = (src) => {
-        els.loaderVideo.src = src;
-        els.loaderVideo.play().catch(() => {});
-      };
-      if (window.VideoCache && window.VideoCache.available()) {
-        window.VideoCache.blobUrlFromCache(backdrop)
-          .then((blobUrl) => useSrc(blobUrl || backdrop))
-          .catch(() => useSrc(backdrop));
-      } else {
-        useSrc(backdrop);
-      }
-    }
+    // No loader backdrop — the download screen stays black on purpose.
   }
 
   function buildRoomsMeta(property, roomDefs) {
@@ -252,9 +235,33 @@
     }
   }
 
+  /* A nav/dot click lands in the target room immediately, then plays a short
+     stretch of it so the arrival has movement rather than being a hard cut.
+
+     The old behaviour glided across the whole timeline, seeking frame by frame
+     through every room in between — ~10 decodes for a 3-room jump, which read
+     as a hang. Switching rooms first and animating only *inside* the target
+     keeps the motion while skipping the expensive part.
+
+     (Scrolling is untouched: that still scrubs frame by frame, which is the
+     point of this player.) */
+  const JUMP_PLAY_SECONDS = 1.1;   // how much of the target room to play on arrival
+
   function jumpToRoom(index) {
     velocity = 0;
-    glideTarget = clamp(rooms[index].cumStart + 0.05, 0, totalDuration);
+    glideTarget = null;
+
+    const room = rooms[index];
+    if (!room) return;
+
+    // Land at the room's start, then glide a little way into it. Forward motion
+    // plays the video for real (browser-decoded, smooth) rather than seeking.
+    globalCurrent = clamp(room.cumStart, 0, totalDuration);
+    switchToRoom(index, 0);
+    highlightActive(index);
+
+    const runTo = Math.min(JUMP_PLAY_SECONDS, Math.max(0, room.duration - 0.1));
+    if (runTo > 0.05) glideTarget = clamp(room.cumStart + runTo, 0, totalDuration);
   }
 
   function highlightActive(index) {
@@ -272,13 +279,24 @@
     const total = rooms.length;
     const progress = rooms.map(() => 0);
 
-    // The loader only gates on room 1, so show that clip's progress - averaging
-    // all N would sit near 15% at the moment the site is actually ready.
+    // Wait for EVERY clip before revealing. Gating on room 1 alone let the
+    // viewer scrub into a room whose video hadn't arrived, which stalls the
+    // playhead — the lag this is meant to remove. Downloading the whole set up
+    // front costs one wait instead of a stutter at every room boundary.
+    const sizes = await Promise.all(rooms.map((r) => headSize(r.video)));
+    const totalBytes = sizes.reduce((a, b) => a + b, 0);
+
     const updateProgress = () => {
-      const pct = Math.round(progress[0] * 100);
+      // Byte-accurate: a per-clip average jumps in big steps and misrepresents
+      // how much is actually left.
+      const done = progress.reduce((sum, frac, i) => sum + frac * (sizes[i] || 0), 0);
+      const pct = totalBytes ? Math.min(100, Math.round((done / totalBytes) * 100)) : 0;
       els.loaderFill.style.width = `${pct}%`;
-      els.loaderLabel.textContent = `Loading walkthrough… ${pct}%`;
+      els.loaderLabel.textContent = totalBytes
+        ? `Downloading walkthrough… ${pct}% · ${formatMB(done)} / ${formatMB(totalBytes)}`
+        : `Loading walkthrough… ${pct}%`;
     };
+    updateProgress();
 
     const fetchRoom = (room, i) =>
       fetchBlobWithProgress(room.video, (p) => {
@@ -286,10 +304,6 @@
         updateProgress();
       });
 
-    // Every clip starts downloading at once (total bytes are the same either
-    // way), but we only WAIT on the first one. The viewer can start scrubbing
-    // room 1 while rooms 2..N are still arriving, instead of staring at a
-    // loader until the whole ~40MB set has landed.
     const pending = rooms.map((room, i) => fetchRoom(room, i));
 
     pending.forEach((p, i) => {
@@ -299,22 +313,32 @@
       }).catch(() => { rooms[i].ready = false; });
     });
 
-    rooms[0].blobUrl = await pending[0];
-    rooms[0].ready = true;
+    await Promise.allSettled(pending);
 
-    // Durations are needed for the timeline, so read each clip's metadata as it
-    // lands rather than blocking on all of them.
-    allRoomsLoaded = Promise.allSettled(pending).then(async () => {
-      for (const room of rooms) {
-        if (!room.blobUrl || room.duration) continue;
-        room.duration = await probeDuration(room.blobUrl);
-      }
-      recomputeTimeline();
-    });
+    // Show a real, filled 100% before the walkthrough opens.
+    els.loaderFill.style.width = '100%';
+    els.loaderLabel.textContent = totalBytes ? `Ready · ${formatMB(totalBytes)}` : 'Ready';
+    await new Promise((r) => setTimeout(r, 450));
 
-    // Only room 1's duration is needed to start; the rest fill in as they land.
-    rooms[0].duration = await probeDuration(rooms[0].blobUrl);
+    // Every clip is in memory, so measure them all now. Previously durations
+    // arrived one at a time and the timeline kept shifting under the viewer;
+    // measuring up front means the full scroll length is correct immediately.
+    for (const room of rooms) {
+      if (!room.blobUrl || room.duration) continue;
+      room.duration = await probeDuration(room.blobUrl);
+    }
     recomputeTimeline();
+    allRoomsLoaded = Promise.resolve();
+  }
+
+  function headSize(url) {
+    return fetch(url, { method: 'HEAD' })
+      .then((r) => Number(r.headers.get('Content-Length')) || 0)
+      .catch(() => 0);
+  }
+
+  function formatMB(bytes) {
+    return `${(bytes / 1024 / 1024).toFixed(0)}MB`;
   }
 
   /* Reads one clip's duration via a throwaway <video>. */
@@ -475,7 +499,6 @@
   function revealSite() {
     els.loader.classList.add('hidden');
     setTimeout(() => {
-      els.loaderVideo.pause();
       els.loader.style.display = 'none';
       maybeShowFullscreenModal();
       // On touch the fullscreen prompt owns the first tap, so the guide waits
@@ -774,17 +797,36 @@
   function easeLoop() {
     if (totalDuration) {
       if (glideTarget !== null) {
-        pauseActive();
-        globalCurrent += (glideTarget - globalCurrent) * GLIDE_EASE;
-        const arrived = Math.abs(glideTarget - globalCurrent) < GLIDE_EPSILON;
-        if (arrived) {
-          globalCurrent = glideTarget;
-          glideTarget = null;
+        // A jump now always glides FORWARD within one room, so let the video
+        // play instead of seeking: the browser decodes sequential frames, which
+        // is smooth by construction. Seeking every frame is what made this
+        // look choppy.
+        const video = activeVideo();
+        const room = rooms[activeIndex];
+        const localTarget = clamp(glideTarget - room.cumStart, 0, room.duration);
+
+        if (video.readyState >= 2 && video.currentTime < localTarget) {
+          if (video.paused) video.play().catch(() => {});
+          video.playbackRate = 1;
+          refreshGlobalCurrent();
+          if (video.currentTime >= localTarget - 0.05) {
+            video.pause();
+            glideTarget = null;
+          }
+        } else {
+          // Fallback (metadata not ready, or target is behind us): ease + seek,
+          // the original behaviour.
+          pauseActive();
+          globalCurrent += (glideTarget - globalCurrent) * GLIDE_EASE;
+          const arrived = Math.abs(glideTarget - globalCurrent) < GLIDE_EPSILON;
+          if (arrived) {
+            globalCurrent = glideTarget;
+            glideTarget = null;
+            seekActiveTo(globalCurrent);
+          } else {
+            seekActivePaced(globalCurrent);
+          }
         }
-        // Pace mid-glide seeks the same way as backward scrubbing, but always
-        // land the final one so a nav jump can't stop a frame short.
-        if (arrived) seekActiveTo(globalCurrent);
-        else seekActivePaced(globalCurrent);
       } else if (velocity > VELOCITY_EPSILON) {
         forwardPlayStep();
         refreshGlobalCurrent();

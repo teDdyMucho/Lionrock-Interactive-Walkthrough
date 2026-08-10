@@ -74,7 +74,8 @@ async function loadVideoRooms() {
     property: {
       title: property.title,
       address: property.address || '',
-      loaderVideo: (intro || usable[0]).video_url,
+      // No loaderVideo: this player's download screen is deliberately black,
+      // so nothing of the walkthrough is shown before it's ready.
       footerNote:
         'This is a Virtual Stage of the Advertized Unit. Actual lighting, ' +
         'colors, and ambiance may vary on different screen.',

@@ -493,6 +493,29 @@ first clip and streams the rest, which is fine when scrubbing moves gradually.
 This player jumps a whole room per click, so a clip that hadn't arrived would
 stall the walk mid-move.
 
+**Both tabs** now download every clip up front behind a **plain black** screen —
+brand, bar, and byte count only. Playing a clip behind the bar previewed the
+walkthrough before it had finished loading, and decoded a video nobody was
+watching yet.
+
+**Nav and dot clicks** land in the target room immediately, then **play about a
+second of it** so the arrival has movement instead of being a hard cut.
+
+The original glide eased across the whole timeline, seeking frame by frame
+through every room in between — ~10 decodes for a 3-room jump, which felt like
+a hang. Landing first and animating only *inside* the target keeps the motion at
+**one seek** instead of ten. The motion itself is real playback, not seeking:
+the browser decodes sequential frames, which is smooth by construction.
+
+Tune with `JUMP_PLAY_SECONDS`. Scrolling is untouched and still scrubs
+frame-by-frame, which is the point of this player.
+
+The Interactive tab used to reveal after only the first clip and stream the
+rest. That looked faster but stuttered whenever scrubbing reached a room whose
+video hadn't arrived; waiting once is smoother than stalling at every room
+boundary. Its durations are now all measured up front too, so the scroll length
+is correct from the first frame instead of shifting as clips land.
+
 The bar fills to a real **100%** and holds there briefly before the walkthrough
 opens — jumping from ~90% straight into playback made it look like the download
 never finished. Per-clip progress is clamped to that clip's `Content-Length`,

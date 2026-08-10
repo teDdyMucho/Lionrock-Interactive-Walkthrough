@@ -32,9 +32,10 @@
 </head>
 <body>
 
-  <!-- Cache / preload loader -->
+  <!-- Cache / preload loader. Plain black on purpose: playing a room clip
+       behind the bar previews the walkthrough before it has finished loading,
+       and decodes a video nobody is watching yet. -->
   <div id="loader">
-    <video id="loader-video" muted loop playsinline autoplay></video>
     <div class="loader-overlay">
       <div class="loader-brand">Lion Rock</div>
       <div class="loader-bar-track">
