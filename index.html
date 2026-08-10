@@ -410,50 +410,6 @@
   }
   .confirm-actions .danger:hover{ background:#fff; }
 
-  /* ---------- Storage consent ---------- */
-  #cache-consent{
-    position:fixed; inset:0; z-index:600;
-    display:none; align-items:center; justify-content:center;
-    padding:24px;
-    background:rgba(12,12,12,.92);
-  }
-  #cache-consent.show{ display:flex; }
-
-  .consent-card{
-    width:min(440px,100%);
-    background:#0c0c0c;
-    border:1px solid rgba(245,243,238,.18);
-    padding:32px 34px 28px;
-  }
-  .consent-card h2{
-    font-family:'Playfair Display',serif;
-    font-weight:500; font-size:1.25rem;
-    margin-bottom:14px;
-  }
-  .consent-card p{
-    font-size:.85rem; line-height:1.65; opacity:.65;
-    margin-bottom:12px;
-  }
-  .consent-fine{ font-size:.75rem !important; opacity:.4 !important; }
-
-  .consent-actions{
-    display:flex; gap:12px; margin-top:22px;
-  }
-  .consent-actions button{
-    flex:1 1 0;
-    padding:13px 20px; cursor:pointer;
-    border:1px solid rgba(245,243,238,.3);
-    background:transparent; color:#f5f3ee;
-    font-family:'Inter',sans-serif;
-    font-size:.72rem; letter-spacing:.1em; text-transform:uppercase;
-    transition:border-color .2s ease, background .2s ease;
-  }
-  .consent-actions button:hover{
-    border-color:rgba(245,243,238,.8); background:rgba(245,243,238,.06);
-  }
-  .consent-actions .allow{ background:#f5f3ee; color:#0c0c0c; border-color:#f5f3ee; }
-  .consent-actions .allow:hover{ background:#fff; }
-
   .card{
     display:block;
     border:1px solid rgba(245,243,238,.15);
@@ -596,26 +552,6 @@
     </div>
   </div>
 
-  <!-- Storage consent — asked once, before any project is opened -->
-  <div id="cache-consent">
-    <div class="consent-card">
-      <h2>Allow saved data?</h2>
-      <p>
-        For a smoother experience, please allow this app to save data on your
-        device automatically. Projects you open will load faster and play
-        without buffering.
-      </p>
-      <p class="consent-fine">
-        Saved in your browser only. You can clear it anytime from your browser
-        settings.
-      </p>
-      <div class="consent-actions">
-        <button type="button" class="allow" id="cache-allow">Allow</button>
-        <button type="button" id="cache-decline">Decline</button>
-      </div>
-    </div>
-  </div>
-
   <!-- ---------- Upload modal ---------- -->
   <div id="upload-modal">
     <div class="upload-panel">
@@ -681,7 +617,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/supabase-config.js"></script>
   <script src="/assets/js/admin-auth.js"></script>
-  <script src="/assets/js/cache-consent.js"></script>
   <script src="/assets/js/gallery.js"></script>
   <script src="/assets/js/upload.js"></script>
   <script src="/assets/js/admin-gate.js"></script>

@@ -65,11 +65,16 @@
 
     await preload();
     revealSite();
+    wireScrubInput();   // scroll/swipe/arrow keys move between rooms
 
     // Open on the first room: play it through once, then hold on its last
     // frame waiting for a nav click.
     await playClip(rooms[0].video);
     highlight(0);
+
+    // Guide comes after the opening clip, so it explains the controls over a
+    // settled frame rather than competing with the video for attention.
+    maybeShowGuide();
   }
 
   function applyChrome(property) {
@@ -145,6 +150,143 @@
       if (!room.navLink) return;
       room.navLink.classList.toggle('busy', state);
       room.navLink.classList.toggle('pending', state && i === pendingIndex);
+    });
+  }
+
+  /* ---------- first-visit guide ---------- */
+
+  const GUIDE_SEEN_KEY = 'lionrock-video-guide-seen';
+  const IS_TOUCH = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+
+  /* Four steps explaining the controls, shown once per browser. Its own key,
+     separate from the Interactive tab's — the two players work differently
+     enough that seeing one doesn't teach you the other. */
+  function maybeShowGuide() {
+    const guide = document.getElementById('guide');
+    if (!guide) return;
+
+    try {
+      if (localStorage.getItem(GUIDE_SEEN_KEY)) return;
+    } catch { /* storage blocked — still worth showing once */ }
+
+    document.getElementById('guide-text-0').textContent =
+      IS_TOUCH ? 'Swipe Up for the Next Room' : 'Scroll Down for the Next Room';
+    document.getElementById('guide-text-1').textContent =
+      IS_TOUCH ? 'Swipe Down to Go Back' : 'Scroll Up to Go Back';
+    document.getElementById('guide-hint').textContent =
+      IS_TOUCH ? 'Tap anywhere to continue' : 'Click anywhere to continue';
+
+    const steps = [...guide.querySelectorAll('.guide-step')];
+    let index = 0;
+
+    const show = (i) => {
+      steps.forEach((s, n) => s.classList.toggle('active', n === i));
+      // Anchor the pointer steps to the real controls they describe.
+      if (i === 2) anchorTo(steps[2], els.nav.querySelector('a:nth-child(2)'));
+      if (i === 3) anchorTo(steps[3], document.getElementById('back-to-gallery'));
+    };
+
+    const advance = () => {
+      index += 1;
+      if (index >= steps.length) {
+        guide.classList.remove('show');
+        document.body.classList.remove('guide-open');
+        try { localStorage.setItem(GUIDE_SEEN_KEY, '1'); } catch { /* ignore */ }
+        return;
+      }
+      show(index);
+    };
+
+    guide.addEventListener('click', advance);
+    guide.addEventListener('touchend', (e) => { e.preventDefault(); advance(); });
+
+    // Scrolling while the guide is up would move rooms behind it. Swallow the
+    // gesture and advance instead, throttled so one flick doesn't skip steps.
+    let locked = false;
+    const onGesture = (e) => {
+      e.preventDefault();
+      if (locked) return;
+      locked = true;
+      setTimeout(() => { locked = false; }, 700);
+      advance();
+    };
+    guide.addEventListener('wheel', onGesture, { passive: false });
+    guide.addEventListener('touchmove', onGesture, { passive: false });
+
+    show(0);
+    guide.classList.add('show');
+    document.body.classList.add('guide-open');
+  }
+
+  /* Draws the ring around a control and centres the label under it. Sized from
+     the target so it hugs a short label and a long one equally well. */
+  function anchorTo(step, target) {
+    if (!target) return;
+
+    const r = target.getBoundingClientRect();
+    const ring = step.querySelector('.guide-ring');
+
+    const ringW = r.width + 26;
+    const ringH = r.height + 14;
+    if (ring) {
+      ring.style.width = `${ringW}px`;
+      ring.style.height = `${ringH}px`;
+    }
+
+    step.style.width = `${ringW}px`;
+    step.style.left = `${r.left + r.width / 2 - ringW / 2}px`;
+    step.style.top = `${r.top + r.height / 2 - ringH / 2}px`;
+    step.style.transform = 'none';
+  }
+
+  /* ---------- scroll / swipe navigation ---------- */
+
+  /* One gesture = one room, matching the Interactive tab's direction:
+     scroll/swipe DOWN moves forward, UP goes back.
+
+     A single wheel flick fires dozens of events and a swipe fires continuously,
+     so both are throttled — otherwise one scroll would race through every room.
+     The lock clears when the transition finishes rather than on a fixed timer,
+     so it can't queue moves faster than the clips can play. */
+  let gestureLocked = false;
+  const TOUCH_THRESHOLD = 40;   // px of swipe before it counts as a move
+
+  function step(delta) {
+    if (gestureLocked) return;
+    const target = activeIndex + delta;
+    if (target < 0 || target >= rooms.length) return;   // at either end
+
+    gestureLocked = true;
+    goToRoom(target).finally(() => { gestureLocked = false; });
+  }
+
+  function wireScrubInput() {
+    window.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      if (Math.abs(e.deltaY) < 4) return;   // ignore trackpad jitter
+      step(e.deltaY > 0 ? 1 : -1);          // down = next
+    }, { passive: false });
+
+    let touchStartY = null;
+    window.addEventListener('touchstart', (e) => {
+      touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+
+    window.addEventListener('touchmove', (e) => {
+      e.preventDefault();                   // don't let the page rubber-band
+      if (touchStartY === null) return;
+      const dy = touchStartY - e.touches[0].clientY;
+      if (Math.abs(dy) < TOUCH_THRESHOLD) return;
+      touchStartY = null;                   // one move per swipe
+      step(dy > 0 ? 1 : -1);                // swipe up (content moves up) = next
+    }, { passive: false });
+
+    window.addEventListener('touchend', () => { touchStartY = null; }, { passive: true });
+
+    // Keyboard, for free: arrows and page keys follow the same rule.
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown' || e.key === 'PageDown') { e.preventDefault(); step(1); }
+      if (e.key === 'ArrowUp' || e.key === 'PageUp') { e.preventDefault(); step(-1); }
     });
   }
 
@@ -293,7 +435,10 @@
     const got = urls.map(() => 0);
 
     const paint = () => {
-      const done = got.reduce((a, b) => a + b, 0);
+      // Clamp per-clip: a clip served from cache reports its full size at once,
+      // and an unknown HEAD size would otherwise let `done` exceed `total` and
+      // make the percentage meaningless.
+      const done = got.reduce((sum, n, i) => sum + Math.min(n, sizes[i] || n), 0);
       const pct = total ? Math.min(100, Math.round((done / total) * 100)) : 0;
       els.loaderFill.style.width = `${pct}%`;
       els.loaderLabel.textContent = total
@@ -311,8 +456,14 @@
       )
     );
 
+    // Every clip is in memory now. Show a real, filled 100% and let it land
+    // before the walkthrough opens — jumping straight from ~90% to playing
+    // makes the bar look like it never finished.
     els.loaderFill.style.width = '100%';
-    els.loaderLabel.textContent = 'Ready';
+    els.loaderLabel.textContent = total
+      ? `Ready · ${formatMB(total)}`
+      : 'Ready';
+    await new Promise((r) => setTimeout(r, 450));
 
     cacheIfAllowed(urls);
   }
@@ -324,7 +475,13 @@
     if (window.VideoCache && window.VideoCache.available()) {
       try {
         const cached = await window.VideoCache.blobUrlFromCache(url);
-        if (cached) { onBytes(Infinity); return cached; }
+        if (cached) {
+          // Report the real size, not Infinity — the progress maths sums these
+          // and an infinite term makes the percentage meaningless.
+          const size = await fetch(cached).then((r) => r.blob()).then((b) => b.size).catch(() => 0);
+          onBytes(size);
+          return cached;
+        }
       } catch { /* fall through to network */ }
     }
 
@@ -359,10 +516,11 @@
     return `${(bytes / 1024 / 1024).toFixed(0)}MB`;
   }
 
+  /* The clips are already downloaded in full by the time this runs — writing
+     them to Cache Storage costs no extra bandwidth and makes the next visit
+     load from disk. No prompt: the download isn't optional, so asking
+     permission to keep what we just fetched would only add a click. */
   function cacheIfAllowed(urls) {
-    try {
-      if (localStorage.getItem('lionrock-cache-consent') !== 'allow') return;
-    } catch { return; }
     if (window.VideoCache && window.VideoCache.available()) {
       window.VideoCache.downloadToCache(urls).catch(() => {});
     }

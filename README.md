@@ -314,7 +314,16 @@ walkthrough/          one shared page, driven by ?property=<slug>
 Cards link to `/walkthrough/?property=<slug>`, and a property only appears once
 it has at least one uploaded video.
 
-### Offline caching consent
+### Caching
+
+Clips are written to Cache Storage automatically — no prompt. There used to be
+an "Allow saved data?" consent on the gallery, but once the Video tab began
+downloading every clip up front the question was moot: the download isn't
+optional, so asking permission to *keep* what was just fetched only added a
+click. Both players now cache unconditionally, best-effort.
+
+<details>
+<summary>Previous behaviour (removed)</summary>
 
 The gallery (welcome page) asks **once**, permission-style:
 
@@ -344,8 +353,10 @@ file manager. Users can clear it from their browser's site-data settings.
 Measured on the sample property: 52.7MB cached across 8 clips; a revisit is
 ready in **0.2s with zero network requests for video**.
 
+</details>
+
 Requires a secure context (https, or localhost) — `caches` is unavailable on
-plain http, so the prompt silently skips itself there. Quota errors are caught
+plain http, so caching silently skips itself there. Quota errors are caught
 and ignored; the walkthrough continues online.
 
 **Caveat — not yet fully offline.** The clips are cached, but the page shell
@@ -416,7 +427,7 @@ where they were built — so the Video tab starts empty until you add to it.
 
 | | **Video Walkthrough** (`/video/`) | **Interactive Walkthrough (Beta)** (`/walkthrough/`) |
 |---|---|---|
-| Input | Click a room in the nav | Scroll / swipe to scrub |
+| Input | Click, scroll, swipe, or arrow keys | Scroll / swipe to scrub |
 | Motion | Plays whole clips end to end | Frame-accurate scrubbing |
 | Backwards | Plays a pre-rendered **reversed** clip | Seeks frame by frame (choppier) |
 | Needs | Forward **and** reversed clips | Forward clips only |
@@ -439,6 +450,13 @@ playing a **pre-rendered reversed copy forwards**:
   looking at the room they just left.
 - Skipping several rooms chains the same rule, so the path stays continuous
   rather than cutting.
+
+**Scroll and swipe** also move between rooms: one gesture = one room, in the
+same direction as the Interactive tab (**down/swipe-up = next**, up = previous).
+Arrow and Page keys work too. Each gesture is locked until its transition
+finishes rather than on a timer, so one wheel flick — which fires dozens of
+events — advances exactly one room instead of racing through the whole unit.
+Scrolling past either end does nothing.
 
 Both tabs have the **dot navigation** down the right edge — same room list as
 the header, easier to hit on a phone, and it reuses the Interactive player's
@@ -475,6 +493,12 @@ first clip and streams the rest, which is fine when scrubbing moves gradually.
 This player jumps a whole room per click, so a clip that hadn't arrived would
 stall the walk mid-move.
 
+The bar fills to a real **100%** and holds there briefly before the walkthrough
+opens — jumping from ~90% straight into playback made it look like the download
+never finished. Per-clip progress is clamped to that clip's `Content-Length`,
+because a clip served from cache reports its whole size at once and would
+otherwise push the total past 100%.
+
 Each clip is held as a blob for the session, so **navigation makes zero network
 requests** once loaded — verified. With storage consent granted, they're also
 written to Cache Storage, and a later visit reads from there instead of
@@ -488,7 +512,19 @@ overwrite the forward one.
 `reverse_path`). Until it's run, both pages fall back to forward-only rather
 than erroring, and the Backward slots won't save.
 
-### First-visit guide
+### First-visit guides
+
+**Both tabs** show a four-step overlay on a viewer's first visit, sharing one
+stylesheet (`walkthrough/assets/guide.css`) so they look identical. Each keeps
+its own `localStorage` key — the two players work differently enough that seeing
+one doesn't teach you the other.
+
+The Video tab's guide appears *after* the opening clip finishes, so it explains
+the controls over a settled frame instead of competing with the video. Its
+wording matches that player: "Scroll Down for the Next Room", "Click to jump
+straight to a Room".
+
+
 
 The first time someone opens a walkthrough, a four-step overlay explains the
 controls, advanced by clicking/tapping (or by scrolling/swiping — the gesture

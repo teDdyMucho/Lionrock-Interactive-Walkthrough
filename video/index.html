@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
 <title>Lion Rock — Video Walkthrough</title>
 <link rel="stylesheet" href="/walkthrough/assets/style.css">
+<link rel="stylesheet" href="/walkthrough/assets/guide.css">
 <meta name="theme-color" content="#0c0c0c">
 <style>
   /* This player is click-driven, not scroll-driven: no scrub engine, no dot
@@ -87,6 +88,46 @@
 
   <div id="footer-overlay">
     <p id="footer-note"></p>
+  </div>
+
+  <!-- First-visit guide: four steps, dismissed by tapping/clicking anywhere -->
+  <div id="guide">
+    <div class="guide-step" data-step="0">
+      <svg class="guide-mouse" viewBox="0 0 60 110" fill="none" stroke="currentColor" aria-hidden="true">
+        <rect x="12" y="4" width="36" height="56" rx="18" stroke-width="3"/>
+        <circle cx="30" cy="18" r="4" fill="currentColor" stroke="none"/>
+        <circle cx="30" cy="30" r="2.5" fill="currentColor" stroke="none" opacity=".8"/>
+        <circle cx="30" cy="39" r="2.5" fill="currentColor" stroke="none" opacity=".6"/>
+        <line x1="30" y1="48" x2="30" y2="92" stroke-width="3"/>
+        <polyline points="18,80 30,96 42,80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <p class="guide-text" id="guide-text-0">Scroll Down for the Next Room</p>
+    </div>
+
+    <div class="guide-step" data-step="1">
+      <svg class="guide-mouse" viewBox="0 0 60 110" fill="none" stroke="currentColor" aria-hidden="true">
+        <polyline points="18,26 30,10 42,26" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="30" y1="14" x2="30" y2="58" stroke-width="3"/>
+        <rect x="12" y="46" width="36" height="56" rx="18" stroke-width="3"/>
+        <circle cx="30" cy="60" r="2.5" fill="currentColor" stroke="none" opacity=".6"/>
+        <circle cx="30" cy="69" r="2.5" fill="currentColor" stroke="none" opacity=".8"/>
+        <circle cx="30" cy="82" r="4" fill="currentColor" stroke="none"/>
+      </svg>
+      <p class="guide-text" id="guide-text-1">Scroll Up to Go Back</p>
+    </div>
+
+    <!-- Steps 3 & 4 point at real controls, so they're anchored, not centred -->
+    <div class="guide-step guide-pointer" data-step="2" id="guide-nav">
+      <div class="guide-ring"></div>
+      <p class="guide-text">Click to jump<br>straight to a Room</p>
+    </div>
+
+    <div class="guide-step guide-pointer" data-step="3" id="guide-gallery">
+      <div class="guide-ring"></div>
+      <p class="guide-text">Click to return<br>to Gallery</p>
+    </div>
+
+    <p class="guide-hint" id="guide-hint">Click anywhere to continue</p>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

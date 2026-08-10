@@ -108,16 +108,11 @@
 
   /* ---------- Automatic offline caching ---------- */
 
-  /* No prompt here — consent is asked once on the gallery (welcome page).
-     If the viewer allowed it, every clip is written to Cache Storage in the
-     background, so the next visit loads from disk. Entirely best-effort: a
-     failure (quota, unsupported browser) never interrupts the walkthrough. */
+  /* Every clip is written to Cache Storage in the background, so the next visit
+     loads from disk. No prompt: the walkthrough downloads these clips either
+     way, so keeping them costs nothing extra. Entirely best-effort — a failure
+     (quota, unsupported browser) never interrupts the walkthrough. */
   function shouldCacheVideos() {
-    try {
-      if (localStorage.getItem('lionrock-cache-consent') !== 'allow') return false;
-    } catch {
-      return false;
-    }
     return !!(window.VideoCache && window.VideoCache.available());
   }
 
