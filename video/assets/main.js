@@ -23,6 +23,7 @@
     loaderFill: document.getElementById('loader-bar-fill'),
     loaderLabel: document.getElementById('loader-label'),
     nav: document.getElementById('room-nav'),
+    dotNav: document.getElementById('dot-nav'),
     stage: document.getElementById('stage'),
     videoA: document.getElementById('video-a'),
     videoB: document.getElementById('video-b'),
@@ -92,12 +93,47 @@
       els.nav.appendChild(a);
       room.navLink = a;
     });
+    buildDotNav();
     highlight(0);
+  }
+
+  /* Same room list as the header, down the right edge. Reuses the Interactive
+     player's markup and styles so the two tabs feel identical. */
+  function buildDotNav() {
+    if (!els.dotNav) return;
+
+    rooms.forEach((room, i) => {
+      const row = document.createElement('div');
+      row.className = 'dot-row';
+
+      const label = document.createElement('span');
+      label.className = 'dot-label';
+      label.textContent = room.label;
+
+      const dot = document.createElement('button');
+      dot.type = 'button';
+      dot.className = 'dot';
+      dot.setAttribute('aria-label', room.label);
+      dot.addEventListener('click', () => goToRoom(i));
+
+      row.appendChild(label);
+      row.appendChild(dot);
+      els.dotNav.appendChild(row);
+      room.dotRow = row;
+    });
   }
 
   function highlight(index) {
     rooms.forEach((room, i) => {
       if (room.navLink) room.navLink.classList.toggle('active', i === index);
+
+      if (!room.dotRow) return;
+      // active / label-above / label-below drive the label's slide-in, matching
+      // the Interactive player's behaviour.
+      room.dotRow.classList.remove('active', 'label-above', 'label-below');
+      room.dotRow.classList.add(
+        i === index ? 'active' : i < index ? 'label-above' : 'label-below'
+      );
     });
   }
 

@@ -27,12 +27,12 @@ function walkthroughHref(slug) {
   return `${base}?property=${encodeURIComponent(slug)}`;
 }
 
-(async function renderGallery() {
+async function renderGallery() {
   const grid = document.getElementById('grid');
   const status = document.getElementById('gallery-status');
   if (!grid) return;
 
-  wireModeTabs();
+  grid.innerHTML = '';   // switching tabs replaces the whole list
 
   const setStatus = (msg) => { if (status) status.textContent = msg || ''; };
 
@@ -60,14 +60,28 @@ function walkthroughHref(slug) {
 
   const db = window.supabase.createClient(cfg.url, cfg.anonKey);
 
-  const { data, error } = await db
+  // Each property belongs to exactly one tab (migration 006). Ask for that
+  // tab's properties only — the two galleries are independent lists.
+  let query = db
     .from('properties')
-    .select('slug, title, address, property_videos(video_url, sort_order)')
+    .select('slug, title, address, mode, property_videos(video_url, sort_order)')
+    .eq('mode', currentMode())
     .order('created_at');
 
+  let { data, error } = await query;
+
+  // Before migration 006 there's no `mode` column; fall back to showing
+  // everything rather than an empty gallery.
   if (error) {
-    setStatus(`Couldn't load properties: ${error.message}`);
-    return;
+    const all = await db
+      .from('properties')
+      .select('slug, title, address, property_videos(video_url, sort_order)')
+      .order('created_at');
+    if (all.error) {
+      setStatus(`Couldn't load properties: ${all.error.message}`);
+      return;
+    }
+    data = all.data;
   }
 
   // Only properties with something to play.
@@ -81,7 +95,10 @@ function walkthroughHref(slug) {
     .filter((p) => p.clips.length);
 
   if (!playable.length) {
-    setStatus('No walkthroughs yet — use the Upload button to add one.');
+    // Name the tab — an empty Video gallery next to a full Interactive one
+    // otherwise looks like the properties vanished.
+    const tab = currentMode() === 'video' ? 'Video Walkthrough' : 'Interactive Walkthrough';
+    setStatus(`No ${tab} projects yet — use Upload/Edit to add one.`);
     return;
   }
 
@@ -92,7 +109,6 @@ function walkthroughHref(slug) {
   grid.appendChild(frag);
 
   wireLazyPreviews(grid);
-  wireModeTabs();   // again, now that the cards exist, so hrefs match the tab
 
   function buildCard(property, posterVideo) {
     const card = document.createElement('a');
@@ -185,31 +201,33 @@ function walkthroughHref(slug) {
     btn.insertAdjacentElement('afterend', note);
     setTimeout(() => note.remove(), 1600);
   }
-})();
+}
 
-/* Switching tabs only changes where the cards point — the same properties are
-   listed either way, so there's nothing to re-fetch. */
-function wireModeTabs() {
+// Render the active tab, and re-render whenever the tab changes.
+wireModeTabs(renderGallery);
+renderGallery();
+
+/* The two tabs list different properties, so switching re-fetches rather than
+   just re-pointing the existing cards. */
+function wireModeTabs(onSwitch) {
   const tabs = [...document.querySelectorAll('.mode-tab')];
   if (!tabs.length) return;
 
-  const paint = () => {
+  const paintActive = () => {
     const mode = currentMode();
     tabs.forEach((t) => t.classList.toggle('active', t.dataset.mode === mode));
-    document.querySelectorAll('.card').forEach((card) => {
-      const slug = new URL(card.href, location.origin).searchParams.get('property');
-      if (slug) card.href = walkthroughHref(slug);
-    });
   };
 
   tabs.forEach((tab) => {
     tab.addEventListener('click', () => {
+      if (tab.dataset.mode === currentMode()) return;
       try { localStorage.setItem(MODE_KEY, tab.dataset.mode); } catch { /* ignore */ }
-      paint();
+      paintActive();
+      if (onSwitch) onSwitch();
     });
   });
 
-  paint();
+  paintActive();
 }
 
 /* Attaches the src only when it's worth paying for, then plays on hover. */

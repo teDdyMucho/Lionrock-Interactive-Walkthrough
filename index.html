@@ -113,6 +113,16 @@
   .upload-close:hover{ opacity:1; }
   .upload-sub{ font-size:.82rem; opacity:.55; margin-bottom:26px; }
 
+  /* Which tab this modal is editing — the two have separate property lists */
+  #upload-mode-tag{
+    display:inline-block; margin-left:12px;
+    padding:4px 10px;
+    border:1px solid rgba(245,243,238,.25);
+    font-family:'Inter',sans-serif;
+    font-size:.6rem; letter-spacing:.1em; text-transform:uppercase;
+    opacity:.6; vertical-align:middle;
+  }
+
   .upload-step{ display:none; }
   .upload-step.active{ display:block; }
 
@@ -611,7 +621,7 @@
     <div class="upload-panel">
 
       <div class="upload-head">
-        <h2>Upload Walkthrough Videos</h2>
+        <h2>Upload Walkthrough Videos<span id="upload-mode-tag"></span></h2>
         <button class="upload-close" id="upload-close" aria-label="Close">&times;</button>
       </div>
 

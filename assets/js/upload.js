@@ -32,6 +32,22 @@ let areaRows = [];
 
 const MAX_FILE_BYTES = 524288000; // 500MB — matches the bucket's file_size_limit
 
+/* Which gallery tab the modal is operating on. Shares the key the gallery
+   writes, so opening Upload/Edit always edits the tab you're looking at. */
+function uploadMode() {
+  try {
+    return localStorage.getItem('lionrock-walkthrough-mode') === 'video'
+      ? 'video'
+      : 'interactive';
+  } catch {
+    return 'interactive';
+  }
+}
+
+function uploadModeLabel() {
+  return uploadMode() === 'video' ? 'Video Walkthrough' : 'Interactive Walkthrough';
+}
+
 const cfg = window.SUPABASE_CONFIG || {};
 const configured =
   cfg.url && cfg.anonKey &&
@@ -56,6 +72,8 @@ const $ = (sel) => document.querySelector(sel);
 function openModal() {
   $('#upload-modal').classList.add('open');
   document.body.style.overflow = 'hidden';
+  const tag = $('#upload-mode-tag');
+  if (tag) tag.textContent = uploadModeLabel();
   showStep(1);
   setPropertyStatus('', false);
   loadProperties();
@@ -96,14 +114,28 @@ async function loadProperties() {
 
   list.innerHTML = '<p class="upload-note">Loading properties…</p>';
 
-  const { data, error } = await db
+  // Only this tab's properties — the two galleries are independent lists
+  // (migration 006), so uploading is scoped to whichever tab is selected.
+  const scoped = await db
     .from('properties')
-    .select('id, slug, title, address')
+    .select('id, slug, title, address, mode')
+    .eq('mode', uploadMode())
     .order('title');
 
-  if (error) {
-    list.innerHTML = `<p class="upload-note error">Couldn't load properties: ${error.message}</p>`;
-    return;
+  let data = scoped.data;
+
+  // Before migration 006 there's no `mode` column; show everything instead of
+  // an empty picker.
+  if (scoped.error) {
+    const all = await db
+      .from('properties')
+      .select('id, slug, title, address')
+      .order('title');
+    if (all.error) {
+      list.innerHTML = `<p class="upload-note error">Couldn't load properties: ${all.error.message}</p>`;
+      return;
+    }
+    data = all.data;
   }
 
   properties = data || [];
@@ -212,11 +244,23 @@ async function createProperty() {
 
   setPropertyStatus('Saving…', false);
 
-  const { data, error } = await db
+  // New properties belong to whichever tab is currently selected.
+  const insert = { slug, title, address, mode: uploadMode() };
+
+  let { data, error } = await db
     .from('properties')
-    .insert({ slug, title, address })
+    .insert(insert)
     .select()
     .single();
+
+  // Pre-migration-006 there's no `mode` column — retry without it.
+  if (error && /mode/.test(error.message || '')) {
+    ({ data, error } = await db
+      .from('properties')
+      .insert({ slug, title, address })
+      .select()
+      .single());
+  }
 
   if (error) {
     setPropertyStatus(explainError(error, 'add the property'), true);
@@ -316,6 +360,9 @@ function orderOf(row) {
 
 function renderAreas() {
   const grid = $('#area-grid');
+  // Reversed clips are only used by the Video Walkthrough player, so the
+  // Interactive tab shows a single drop per room.
+  const wantsReverse = uploadMode() === 'video';
 
   grid.innerHTML = areaRows.map((r, i) => `
     <div class="area-slot${r.intro ? ' optional' : ''}" data-area="${escapeHtml(r.area)}" data-index="${i}"
@@ -330,14 +377,15 @@ function renderAreas() {
       <div class="area-drops">
         <label class="area-drop" data-kind="forward">
           <input type="file" accept="video/mp4,video/quicktime,video/webm" hidden>
-          <span class="drop-kind">Forward</span>
+          ${wantsReverse ? '<span class="drop-kind">Forward</span>' : ''}
           <span class="area-hint">${r.hasVideo ? 'Uploaded' : 'Choose or drop'}</span>
         </label>
+        ${wantsReverse ? `
         <label class="area-drop" data-kind="reverse">
           <input type="file" accept="video/mp4,video/quicktime,video/webm" hidden>
           <span class="drop-kind">Backward</span>
           <span class="area-hint">${r.hasReverse ? 'Uploaded' : 'Choose or drop'}</span>
-        </label>
+        </label>` : ''}
       </div>
       <div class="area-progress"><div class="area-progress-fill"></div></div>
     </div>`

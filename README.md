@@ -400,8 +400,19 @@ staged, so it doubles as a plain Save.
 
 ### Two walkthrough styles
 
-The gallery header has two tabs. Both list the **same properties** — only the
-player differs, so renaming or reordering a room updates both.
+The gallery header has two tabs, each with its **own separate list of
+properties** (`properties.mode`, migration 006). A property uploaded to Video
+Walkthrough appears only there; the same is true for Interactive. Switching tabs
+re-fetches rather than re-pointing the existing cards.
+
+**Upload/Edit follows the selected tab.** The modal shows only that tab's
+properties, creates new ones in it, and displays the tab name as a badge in its
+header so there's no doubt which list you're editing. The Interactive tab shows
+one drop per room; only Video shows the Forward/Backward pair, since reversed
+clips are useless to the scrub player.
+
+Existing properties were assigned to `interactive` by the migration — that's
+where they were built — so the Video tab starts empty until you add to it.
 
 | | **Video Walkthrough** (`/video/`) | **Interactive Walkthrough (Beta)** (`/walkthrough/`) |
 |---|---|---|
@@ -428,6 +439,11 @@ playing a **pre-rendered reversed copy forwards**:
   looking at the room they just left.
 - Skipping several rooms chains the same rule, so the path stays continuous
   rather than cutting.
+
+Both tabs have the **dot navigation** down the right edge — same room list as
+the header, easier to hit on a phone, and it reuses the Interactive player's
+markup and styles so the two feel identical. Clicking a dot moves rooms exactly
+like clicking the header nav.
 
 Clips are swapped instantly, with no crossfade, and only once the incoming clip
 has painted its first frame (`requestVideoFrameCallback`). An earlier 0.25s fade
