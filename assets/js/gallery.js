@@ -10,10 +10,29 @@
  * (desktop) or scrolled into view (touch).
  */
 
+/* Which player the cards link to. Remembered so the choice survives a reload
+   and a trip into a walkthrough and back. */
+const MODE_KEY = 'lionrock-walkthrough-mode';
+
+function currentMode() {
+  try {
+    return localStorage.getItem(MODE_KEY) === 'video' ? 'video' : 'interactive';
+  } catch {
+    return 'interactive';
+  }
+}
+
+function walkthroughHref(slug) {
+  const base = currentMode() === 'video' ? '/video/' : '/walkthrough/';
+  return `${base}?property=${encodeURIComponent(slug)}`;
+}
+
 (async function renderGallery() {
   const grid = document.getElementById('grid');
   const status = document.getElementById('gallery-status');
   if (!grid) return;
+
+  wireModeTabs();
 
   const setStatus = (msg) => { if (status) status.textContent = msg || ''; };
 
@@ -73,11 +92,12 @@
   grid.appendChild(frag);
 
   wireLazyPreviews(grid);
+  wireModeTabs();   // again, now that the cards exist, so hrefs match the tab
 
   function buildCard(property, posterVideo) {
     const card = document.createElement('a');
     card.className = 'card';
-    card.href = `/walkthrough/?property=${encodeURIComponent(property.slug)}`;
+    card.href = walkthroughHref(property.slug);
 
     const thumb = document.createElement('div');
     thumb.className = 'thumb';
@@ -166,6 +186,31 @@
     setTimeout(() => note.remove(), 1600);
   }
 })();
+
+/* Switching tabs only changes where the cards point — the same properties are
+   listed either way, so there's nothing to re-fetch. */
+function wireModeTabs() {
+  const tabs = [...document.querySelectorAll('.mode-tab')];
+  if (!tabs.length) return;
+
+  const paint = () => {
+    const mode = currentMode();
+    tabs.forEach((t) => t.classList.toggle('active', t.dataset.mode === mode));
+    document.querySelectorAll('.card').forEach((card) => {
+      const slug = new URL(card.href, location.origin).searchParams.get('property');
+      if (slug) card.href = walkthroughHref(slug);
+    });
+  };
+
+  tabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      try { localStorage.setItem(MODE_KEY, tab.dataset.mode); } catch { /* ignore */ }
+      paint();
+    });
+  });
+
+  paint();
+}
 
 /* Attaches the src only when it's worth paying for, then plays on hover. */
 function wireLazyPreviews(grid) {

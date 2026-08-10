@@ -24,6 +24,27 @@
   }
   header img{ height:30px; }
 
+  /* ---------- Video / Interactive tabs ---------- */
+  .mode-tabs{
+    display:flex; align-items:center; gap:40px;
+    flex:1 1 auto;
+    margin-left:56px;
+  }
+  .mode-tab{
+    background:none; border:none; padding:4px 0; cursor:pointer;
+    color:#f5f3ee;
+    font-family:'Playfair Display',serif;
+    font-size:1.05rem;
+    opacity:.5;
+    border-bottom:1px solid transparent;
+    transition:opacity .25s ease, border-color .25s ease;
+  }
+  .mode-tab:hover{ opacity:.85; }
+  .mode-tab.active{
+    opacity:1;
+    border-bottom-color:#f5f3ee;
+  }
+
   /* ---------- Upload button ---------- */
   /* Hidden until auth confirms a signed-in admin (see admin-gate.js). Starting
      hidden avoids flashing an Upload button at every visitor on load. */
@@ -240,13 +261,29 @@
     font-family:'Inter',sans-serif; font-size:.85rem;
   }
   .add-area input:focus{ outline:none; border-color:rgba(245,243,238,.6); }
+  /* Two clips per room: the forward walk and the pre-rendered reverse. */
+  .area-drops{ display:flex; gap:8px; }
+  .area-drops .area-drop{ flex:1 1 0; min-width:0; }
+
+  .drop-kind{
+    font-family:'Inter',sans-serif;
+    font-size:.62rem; letter-spacing:.08em; text-transform:uppercase;
+    opacity:.75;
+  }
+
   .area-drop{
-    display:flex; align-items:center; justify-content:center;
-    min-height:64px; padding:10px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:4px;
+    min-height:64px; padding:10px 8px;
     border:1px dashed rgba(245,243,238,.25);
     cursor:pointer; text-align:center;
     transition:border-color .2s ease, background .2s ease;
   }
+  .area-drop.staged{ border-color:rgba(245,243,238,.6); }
+  .area-drop.done{ border-color:#5f8f6a; }
+  .area-drop.done .area-hint{ color:#8fc79b; opacity:1; }
+  .area-drop.error{ border-color:#a35c5c; }
+  .area-drop.error .area-hint{ color:#d99; opacity:1; }
   .area-drop:hover, .area-drop.dragging{
     border-color:rgba(245,243,238,.7);
     background:rgba(245,243,238,.05);
@@ -495,6 +532,13 @@
     <a href="https://example.com">
       <img src="/assets/img/lion-rock-logo.png" alt="Lion Rock">
     </a>
+
+    <!-- Which walkthrough style the gallery links to. Same properties either
+         way — only the player differs. -->
+    <nav class="mode-tabs">
+      <button type="button" class="mode-tab" data-mode="video">Video Walkthrough</button>
+      <button type="button" class="mode-tab active" data-mode="interactive">Interactive Walkthrough (Beta)</button>
+    </nav>
 
     <!-- Admin-only controls; both stay hidden unless signed in -->
     <div class="admin-controls">

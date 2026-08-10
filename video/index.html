@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<title>Lion Rock — Video Walkthrough</title>
+<link rel="stylesheet" href="/walkthrough/assets/style.css">
+<meta name="theme-color" content="#0c0c0c">
+<style>
+  /* This player is click-driven, not scroll-driven: no scrub engine, no dot
+     nav. Rooms are entered by clicking the header nav, and the transition
+     between them is a real video that plays forwards. */
+  html,body{ overflow:hidden; }
+
+  /* No crossfade between clips. Every clip is a preloaded blob, so the swap is
+     instant anyway — and a 0.25s fade meant the first quarter-second of each
+     clip played while still transparent. On a short reverse clip that read as
+     "the reverse never played", because the visible part was already the next
+     forward clip. */
+  #stage video{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    object-fit:cover;
+    opacity:0;
+  }
+  #stage video.active{ opacity:1; }
+
+  /* The nav stays clickable while a clip plays — a new click takes over from
+     the walk in progress (see walkToken in main.js). `pending` just marks
+     where the current walk is heading. */
+  #room-nav a.busy.pending{ opacity:1; text-decoration:underline; text-underline-offset:6px; }
+
+  #walkthrough-error{
+    position:fixed; inset:0; z-index:1200;
+    display:none; flex-direction:column; align-items:center; justify-content:center;
+    gap:20px; padding:40px; text-align:center;
+    background:#0c0c0c;
+  }
+  #walkthrough-error.show{ display:flex; }
+  #walkthrough-error p{
+    font-family:'Playfair Display',serif;
+    font-size:1.15rem; max-width:34ch; line-height:1.6;
+  }
+  #walkthrough-error a{
+    font-size:.75rem; letter-spacing:.1em; text-transform:uppercase;
+    padding:12px 26px; border:1px solid rgba(245,243,238,.35);
+  }
+  #walkthrough-error a:hover{ border-color:rgba(245,243,238,.8); }
+</style>
+</head>
+<body>
+
+  <div id="loader">
+    <video id="loader-video" muted loop playsinline autoplay></video>
+    <div class="loader-overlay">
+      <div class="loader-brand">Lion Rock</div>
+      <div class="loader-bar-track">
+        <div class="loader-bar-fill" id="loader-bar-fill"></div>
+      </div>
+      <div class="loader-label" id="loader-label">Loading walkthrough… 0%</div>
+    </div>
+  </div>
+
+  <div id="walkthrough-error">
+    <p id="walkthrough-error-text"></p>
+    <a href="/">← Back to gallery</a>
+  </div>
+
+  <header id="site-header">
+    <a href="/" id="brand-link" class="brand">
+      <img src="/assets/img/lion-rock-logo.png" alt="Lion Rock">
+    </a>
+    <div id="header-right">
+      <nav id="room-nav" aria-label="Room navigation"></nav>
+      <a href="/" id="back-to-gallery" title="Back to gallery">← Gallery</a>
+    </div>
+  </header>
+
+  <!-- Two elements so the next clip can be buffered while the current one plays -->
+  <main id="stage">
+    <video id="video-a" muted playsinline preload="auto"></video>
+    <video id="video-b" muted playsinline preload="auto"></video>
+  </main>
+
+  <div id="footer-overlay">
+    <p id="footer-note"></p>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/supabase-config.js"></script>
+  <script src="/walkthrough/assets/video-cache.js"></script>
+  <script src="/video/assets/rooms-source.js"></script>
+  <script src="/video/assets/main.js"></script>
+</body>
+</html>

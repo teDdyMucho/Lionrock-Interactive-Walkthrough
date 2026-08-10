@@ -244,13 +244,28 @@ async function buildAreaRows() {
 
   if (!db || !selectedPropertyId) return;
 
-  const { data, error } = await db
+  // reverse_url only exists once migration 005 has run; asking for it before
+  // that 400s the whole query, so fall back to the forward-only shape.
+  let data = null;
+  const full = await db
     .from('property_videos')
-    .select('area, label, video_url, sort_order')
+    .select('area, label, video_url, reverse_url, storage_path, reverse_path, sort_order')
     .eq('property_id', selectedPropertyId)
     .order('sort_order');
 
-  if (error || !data) return;
+  if (full.error) {
+    const basic = await db
+      .from('property_videos')
+      .select('area, label, video_url, sort_order')
+      .eq('property_id', selectedPropertyId)
+      .order('sort_order');
+    if (basic.error || !basic.data) return;
+    data = basic.data;
+  } else {
+    data = full.data;
+  }
+
+  if (!data) return;
 
   data.forEach((row) => {
     const match = areaRows.find((r) => r.area === row.area);
@@ -258,6 +273,9 @@ async function buildAreaRows() {
       match.label = row.label || match.label;   // saved rename wins
       match.existing = true;
       match.hasVideo = !!row.video_url;
+      match.hasReverse = !!row.reverse_url;
+      match.storagePath = row.storage_path || null;
+      match.reversePath = row.reverse_path || null;
       match.savedSort = row.sort_order;
     } else {
       areaRows.push({
@@ -266,6 +284,9 @@ async function buildAreaRows() {
         intro: row.area === 'intro',
         existing: true,
         hasVideo: !!row.video_url,
+        hasReverse: !!row.reverse_url,
+        storagePath: row.storage_path || null,
+        reversePath: row.reverse_path || null,
         savedSort: row.sort_order,
       });
     }
@@ -306,10 +327,18 @@ function renderAreas() {
         ${r.intro ? '<span class="area-opt">optional</span>' : ''}
         ${r.intro ? '' : '<button class="area-remove" title="Remove this area" aria-label="Remove">&times;</button>'}
       </div>
-      <label class="area-drop">
-        <input type="file" accept="video/mp4,video/quicktime,video/webm" hidden>
-        <span class="area-hint">${r.hasVideo ? 'Uploaded — choose a file to replace' : 'Choose or drop a video'}</span>
-      </label>
+      <div class="area-drops">
+        <label class="area-drop" data-kind="forward">
+          <input type="file" accept="video/mp4,video/quicktime,video/webm" hidden>
+          <span class="drop-kind">Forward</span>
+          <span class="area-hint">${r.hasVideo ? 'Uploaded' : 'Choose or drop'}</span>
+        </label>
+        <label class="area-drop" data-kind="reverse">
+          <input type="file" accept="video/mp4,video/quicktime,video/webm" hidden>
+          <span class="drop-kind">Backward</span>
+          <span class="area-hint">${r.hasReverse ? 'Uploaded' : 'Choose or drop'}</span>
+        </label>
+      </div>
       <div class="area-progress"><div class="area-progress-fill"></div></div>
     </div>`
   ).join('');
@@ -459,60 +488,83 @@ function slugify(str) {
 function wireSlot(slot) {
   const area = slot.dataset.area;
   const row = areaRows[Number(slot.dataset.index)];
-  const input = slot.querySelector('input[type=file]');
-  const drop = slot.querySelector('.area-drop');
 
   if (row) {
     wireAreaName(slot, row);
     wireAreaRemove(slot, row);
-    // Re-show a file staged before the last re-render.
-    const pending = staged.get(area);
-    if (pending) setSlotState(slot, 'staged', `${pending.name} · ${formatSize(pending.size)}`);
   }
 
-  input.addEventListener('change', () => {
-    if (input.files[0]) stageFile(slot, area, input.files[0]);
-  });
+  // Each room has two drops: the forward clip and the pre-rendered reversed
+  // one. They're staged under separate keys so both can upload in one go.
+  slot.querySelectorAll('.area-drop').forEach((drop) => {
+    const kind = drop.dataset.kind;                 // 'forward' | 'reverse'
+    const key = stageKey(area, kind);
+    const input = drop.querySelector('input[type=file]');
+    const hint = drop.querySelector('.area-hint');
 
-  ['dragenter', 'dragover'].forEach((ev) =>
-    drop.addEventListener(ev, (e) => {
-      e.preventDefault();
-      drop.classList.add('dragging');
-    })
-  );
-  ['dragleave', 'drop'].forEach((ev) =>
-    drop.addEventListener(ev, (e) => {
-      e.preventDefault();
-      drop.classList.remove('dragging');
-    })
-  );
-  drop.addEventListener('drop', (e) => {
-    const file = e.dataTransfer.files[0];
-    if (file) stageFile(slot, area, file);
+    // Re-show a file staged before the last re-render.
+    const pending = staged.get(key);
+    if (pending) setDropState(drop, 'staged', `${pending.name} · ${formatSize(pending.size)}`);
+
+    input.addEventListener('change', () => {
+      if (input.files[0]) stageFile(drop, key, input.files[0]);
+    });
+
+    ['dragenter', 'dragover'].forEach((ev) =>
+      drop.addEventListener(ev, (e) => {
+        e.preventDefault();
+        drop.classList.add('dragging');
+      })
+    );
+    ['dragleave', 'drop'].forEach((ev) =>
+      drop.addEventListener(ev, (e) => {
+        e.preventDefault();
+        drop.classList.remove('dragging');
+      })
+    );
+    drop.addEventListener('drop', (e) => {
+      const file = e.dataTransfer.files[0];
+      if (file) stageFile(drop, key, file);
+    });
+
+    if (!hint.textContent.trim()) hint.textContent = 'Choose or drop';
   });
 }
 
-function stageFile(slot, area, file) {
+/* staged is keyed "<area>::<kind>" so forward and reverse don't collide. */
+function stageKey(area, kind) { return `${area}::${kind}`; }
+function parseKey(key) {
+  const [area, kind] = key.split('::');
+  return { area, kind: kind || 'forward' };
+}
+
+function stageFile(drop, key, file) {
   if (!file.type.startsWith('video/')) {
-    setSlotState(slot, 'error', 'Not a video file');
+    setDropState(drop, 'error', 'Not a video file');
     return;
   }
   if (file.size > MAX_FILE_BYTES) {
-    setSlotState(slot, 'error', `Too large (${formatSize(file.size)} — max 500MB)`);
+    setDropState(drop, 'error', `Too large (max 500MB)`);
     return;
   }
-  staged.set(area, file);
-  setSlotState(slot, 'staged', `${file.name} · ${formatSize(file.size)}`);
+  staged.set(key, file);
+  setDropState(drop, 'staged', `${file.name} · ${formatSize(file.size)}`);
   // Save is never gated on a staged file — renames, reorders and title/address
   // edits are all savable on their own. (Bug: this used to disable the button
   // whenever nothing was staged, so a rename-only edit couldn't be saved.)
   $('#start-upload').disabled = false;
 }
 
-function setSlotState(slot, state, text) {
-  slot.classList.remove('staged', 'error', 'done', 'uploading');
-  slot.classList.add(state);
-  slot.querySelector('.area-hint').textContent = text;
+function setDropState(drop, state, text) {
+  drop.classList.remove('staged', 'error', 'done', 'uploading');
+  drop.classList.add(state);
+  drop.querySelector('.area-hint').textContent = text;
+}
+
+/* Finds the drop element for a staged key, after any re-render. */
+function dropFor(key) {
+  const { area, kind } = parseKey(key);
+  return $(`.area-slot[data-area="${area}"] .area-drop[data-kind="${kind}"]`);
 }
 
 function setSlotProgress(slot, pct) {
@@ -546,23 +598,34 @@ async function startUpload() {
   let done = 0;
   let failed = 0;
 
-  for (const [area, file] of staged) {
+  for (const [key, file] of staged) {
+    const { area, kind } = parseKey(key);
     const slot = $(`.area-slot[data-area="${area}"]`);
+    const drop = dropFor(key);
     const meta = areaRows.find((r) => r.area === area);
-    if (!slot || !meta) continue; // area was removed after staging
+    if (!slot || !drop || !meta) continue; // area was removed after staging
 
-    setSlotState(slot, 'uploading', `Uploading ${file.name}…`);
+    setDropState(drop, 'uploading', 'Uploading…');
     setSlotProgress(slot, 0);
 
     const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
-    const path = `${property.slug}/${area}.${ext}`;
+    // Reversed clips get their own object so they never overwrite the forward one.
+    const path = `${property.slug}/${area}${kind === 'reverse' ? '-reverse' : ''}.${ext}`;
+
+    // Replacing a .mp4 with a .mov writes a DIFFERENT object, leaving the old
+    // one behind — still stored, still billed, and still the one some cached
+    // client might hold. Remove the previous file when the extension changes.
+    const prevPath = kind === 'reverse' ? meta.reversePath : meta.storagePath;
+    if (prevPath && prevPath !== path) {
+      await db.storage.from(cfg.bucket || 'walkthrough-videos').remove([prevPath]);
+    }
 
     const { error: upErr } = await db.storage
       .from(cfg.bucket || 'walkthrough-videos')
       .upload(path, file, { upsert: true, contentType: file.type });
 
     if (upErr) {
-      setSlotState(slot, 'error', explainError(upErr, 'upload'));
+      setDropState(drop, 'error', explainError(upErr, 'upload'));
       failed++;
       continue;
     }
@@ -573,25 +636,39 @@ async function startUpload() {
       .from(cfg.bucket || 'walkthrough-videos')
       .getPublicUrl(path);
 
+    // Replacing a clip reuses the same storage path, so the public URL never
+    // changes — and anything keyed by URL (our Cache Storage, the browser's own
+    // cache, a CDN) would happily keep serving the OLD video forever. A version
+    // stamp makes each replacement a distinct URL, so the new file actually
+    // reaches viewers.
+    const publicUrl = `${pub.publicUrl}?v=${Date.now()}`;
+
+    const record = {
+      property_id: selectedPropertyId,
+      area,
+      label: meta.label,
+      sort_order: orderOf(meta),
+    };
+    if (kind === 'reverse') {
+      record.reverse_url = publicUrl;
+      record.reverse_path = path;
+    } else {
+      record.video_url = publicUrl;
+      record.storage_path = path;
+    }
+
     const { error: rowErr } = await db.from('property_videos').upsert(
-      {
-        property_id: selectedPropertyId,
-        area,
-        label: meta.label,
-        video_url: pub.publicUrl,
-        storage_path: path,
-        sort_order: orderOf(meta),
-      },
+      record,
       { onConflict: 'property_id,area' }
     );
 
     if (rowErr) {
-      setSlotState(slot, 'error', explainError(rowErr, 'save the link'));
+      setDropState(drop, 'error', explainError(rowErr, 'save the link'));
       failed++;
       continue;
     }
 
-    setSlotState(slot, 'done', 'Uploaded');
+    setDropState(drop, 'done', 'Uploaded');
     done++;
   }
 

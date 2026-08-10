@@ -12,7 +12,33 @@
  * error hits, the caller just falls back to a normal network fetch.
  */
 
-const CACHE_NAME = 'lionrock-walkthrough-v1';
+const CACHE_NAME = 'lionrock-walkthrough-v2';
+
+/* Entries are keyed by URL. A replaced clip now gets a fresh `?v=` stamp, so it
+   lands on a new key — but the OLD key lingers forever, holding a copy of a
+   video nobody can reach any more. Dropping same-path/different-version entries
+   keeps the cache from growing without bound. */
+function pathOf(url) {
+  try {
+    return new URL(url, location.origin).pathname;
+  } catch {
+    return url.split('?')[0];
+  }
+}
+
+async function evictOtherVersions(cache, keepUrls) {
+  const keepPaths = new Map();
+  keepUrls.forEach((u) => keepPaths.set(pathOf(u), u));
+
+  try {
+    for (const req of await cache.keys()) {
+      const p = pathOf(req.url);
+      const wanted = keepPaths.get(p);
+      // Same file, different (older) version stamp → superseded, drop it.
+      if (wanted && wanted !== req.url) await cache.delete(req);
+    }
+  } catch { /* eviction is best-effort */ }
+}
 
 /* Safari in private mode exposes caches but throws on use, so feature-detection
    alone isn't enough — callers treat a rejection as "no cache". */
@@ -60,6 +86,9 @@ async function cachedBytes(urls) {
 async function downloadToCache(urls, onProgress) {
   const cache = await openCache();
   if (!cache) throw new Error('This browser can\'t store the walkthrough offline.');
+
+  // Clear superseded copies of these same clips before storing the new ones.
+  await evictOtherVersions(cache, urls);
 
   const progress = urls.map(() => 0);
   const report = () => {
@@ -159,6 +188,15 @@ async function requestPersistence() {
   return false;
 }
 
+/* Drops any cached copy of these clips that isn't the current version. Called
+   on load so a viewer who cached an older clip picks up the replacement
+   immediately, rather than only after re-caching. */
+async function pruneStale(urls) {
+  const cache = await openCache();
+  if (!cache) return;
+  await evictOtherVersions(cache, urls);
+}
+
 window.VideoCache = {
   available: cacheAvailable,
   isCached,
@@ -166,5 +204,6 @@ window.VideoCache = {
   downloadToCache,
   blobUrlFromCache,
   clearCache,
+  pruneStale,
   requestPersistence,
 };

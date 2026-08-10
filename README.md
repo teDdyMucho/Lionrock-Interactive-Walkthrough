@@ -379,12 +379,98 @@ Saving uses an **upsert**, not an update: an area that has never had a video
 has no row yet, and an UPDATE would silently match nothing. That was a real bug
 — renames appeared to work but never reached the database.
 
+**Replacing a video** appends a `?v=<timestamp>` stamp to the stored URL, and
+the offline cache prunes superseded versions of the same path on load
+(`VideoCache.pruneStale`). Without both, a browser that had cached the clip kept
+playing the old one indefinitely while a fresh browser showed the new one —
+which is exactly how the bug presented.
+Re-uploading reuses the same storage path, so without the stamp the URL is
+unchanged and anything keyed by URL — the offline cache, the browser cache, a
+CDN — keeps serving the *old* clip indefinitely. That's why a replaced video
+appeared not to change. The upload also deletes the previous object when the
+new file has a different extension (`.mov` replacing `.mp4`), which would
+otherwise leave the old file stored, billed, and still reachable.
+
 The 8 defaults (Intro + 7 rooms) are just the starting point for a new
 property. Once a property has rows in `property_videos`, the modal loads its
 saved labels and custom areas instead.
 
 **Save & Upload** saves renames and title/address edits even when no file is
 staged, so it doubles as a plain Save.
+
+### Two walkthrough styles
+
+The gallery header has two tabs. Both list the **same properties** — only the
+player differs, so renaming or reordering a room updates both.
+
+| | **Video Walkthrough** (`/video/`) | **Interactive Walkthrough (Beta)** (`/walkthrough/`) |
+|---|---|---|
+| Input | Click a room in the nav | Scroll / swipe to scrub |
+| Motion | Plays whole clips end to end | Frame-accurate scrubbing |
+| Backwards | Plays a pre-rendered **reversed** clip | Seeks frame by frame (choppier) |
+| Needs | Forward **and** reversed clips | Forward clips only |
+
+The chosen tab is remembered in `localStorage`
+(`lionrock-walkthrough-mode`), so it survives a reload and a trip into a
+walkthrough and back.
+
+#### How the Video Walkthrough moves
+
+No browser can play a `<video>` backwards, which is what makes reverse
+scrubbing the weak point of the Interactive tab. The Video tab sidesteps it by
+playing a **pre-rendered reversed copy forwards**:
+
+- **Click a later room** → play that room's forward clip. *(1 clip per room
+  stepped through.)*
+- **Click an earlier room** → play the **current** room's reversed clip
+  (walking back out), **then** the target's forward clip (walking in).
+  *(2 clips.)* Both are needed — playing only the reverse leaves the viewer
+  looking at the room they just left.
+- Skipping several rooms chains the same rule, so the path stays continuous
+  rather than cutting.
+
+Clips are swapped instantly, with no crossfade, and only once the incoming clip
+has painted its first frame (`requestVideoFrameCallback`). An earlier 0.25s fade
+meant each clip began playing while still transparent — on a 3s reverse clip
+that swallowed a visible chunk of it, which read as "the reverse never played"
+even though it had.
+
+The nav stays clickable while a clip is playing — a new click **takes over**
+from the walk in progress, starting from whichever room has actually been
+reached. The room being travelled to is underlined (`.pending`) so the
+destination is visible before it arrives.
+
+Interrupting is handled with a `walkToken`: each click bumps it, and the
+running loop checks after every clip, bailing out if it's been superseded. The
+in-flight clip is paused, and `playClip` resolves on that pause rather than
+waiting for an `ended` event that will never fire — otherwise the old walk
+would hang and keep advancing behind the new one.
+A room with no reversed clip still works — it falls back to the target's
+forward clip, just without the walking-backwards effect.
+
+#### Preloading
+
+Clicking a card downloads **every** clip before the walkthrough opens, behind a
+progress screen showing real bytes ("Downloading walkthrough… 78% · 32MB /
+41MB").
+
+This differs from the Interactive tab on purpose. That one reveals after the
+first clip and streams the rest, which is fine when scrubbing moves gradually.
+This player jumps a whole room per click, so a clip that hadn't arrived would
+stall the walk mid-move.
+
+Each clip is held as a blob for the session, so **navigation makes zero network
+requests** once loaded — verified. With storage consent granted, they're also
+written to Cache Storage, and a later visit reads from there instead of
+re-downloading.
+
+Upload both clips per room from the **Forward** / **Backward** drops in the
+upload modal. Reversed files are stored as `<area>-reverse.<ext>` so they never
+overwrite the forward one.
+
+**Requires `supabase/migrations/005-reverse-videos.sql`** (adds `reverse_url` /
+`reverse_path`). Until it's run, both pages fall back to forward-only rather
+than erroring, and the Backward slots won't save.
 
 ### First-visit guide
 
