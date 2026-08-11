@@ -75,6 +75,13 @@
   ];
   let activeSlot = 0;
 
+  /* A room-end handoff can take several frames to land (the standby clip has to
+     report loadedmetadata). Re-requesting it every frame in the meantime bumps
+     swapToken each time, and each bump supersedes the pending finishSwap from
+     the frame before - starving the swap it was trying to make. So once one is
+     in flight, leave it alone. See requestHandoff. */
+  let handoffPending = false;
+
   let scrubEngineActive = false;
 
   init();
@@ -293,7 +300,12 @@
   }
 
   function prewarmNeighbor() {
-    const targetIndex = activeIndex + lastDirection;
+    // Forward wraps to the intro so the last room's handoff finds its target
+    // already in standby, same as every other boundary - otherwise that one
+    // transition always took the slow async path.
+    const targetIndex = lastDirection > 0
+      ? (activeIndex + 1) % rooms.length
+      : activeIndex - 1;
     if (targetIndex < 0 || targetIndex >= rooms.length) return;
     const standby = slots[1 - activeSlot];
     if (standby.roomIndex === targetIndex) return;
@@ -313,6 +325,11 @@
   let swapToken = 0;
 
   function switchToRoom(index, localTime) {
+    // Any new request supersedes a room-end handoff that was still in flight,
+    // so the "don't re-request it" latch has to drop with it - otherwise a nav
+    // click landing mid-handoff would leave it stuck on forever.
+    handoffPending = false;
+
     lastDirection = index > activeIndex ? 1 : -1;
     activeIndex = index;
 
@@ -322,6 +339,7 @@
 
     const finishSwap = () => {
       if (myToken !== swapToken) return; // superseded by a later switchToRoom call
+      handoffPending = false;            // swap landed - boundary is clear again
       standby.el.currentTime = localTime;
       slots[activeSlot].el.pause();
       slots[activeSlot].el.classList.remove('active');
@@ -338,6 +356,12 @@
       standby.el.src = rooms[index].blobUrl;
       standby.el.load();
       standby.el.addEventListener('loadedmetadata', finishSwap, { once: true });
+      // If the clip fails to load, loadedmetadata never fires and the handoff
+      // latch would stay on forever, wedging forward motion at this boundary.
+      // Release it so the next frame can retry.
+      standby.el.addEventListener('error', () => {
+        if (myToken === swapToken) handoffPending = false;
+      }, { once: true });
     }
   }
 
@@ -498,20 +522,37 @@
     let video = activeVideo();
     let room = rooms[activeIndex];
 
-    if (video.paused) video.play().catch(() => {});
-    video.playbackRate = rate;
-
-    if (video.currentTime >= room.duration - ROOM_END_EPSILON || video.ended) {
+    // The boundary is checked BEFORE any play() call, because play() on an
+    // element that has already ended seeks it back to zero (HTML spec) - which
+    // is exactly how a finished room used to play through a second time.
+    if (video.ended || video.currentTime >= room.duration - ROOM_END_EPSILON) {
       // clip's basically done - hand off to the next room (or loop back to the intro)
-      const nextIndex = (activeIndex + 1) % rooms.length;
-      switchToRoom(nextIndex, 0);
+      const slotBefore = activeSlot;
+      requestHandoff();
+
+      if (activeSlot === slotBefore) {
+        // Swap hasn't landed yet - the next clip is still loading. Hold at the
+        // end of this room; the swap resumes motion on a later frame.
+        pauseActive();
+        return;
+      }
+
       video = activeVideo();
       room = rooms[activeIndex];
-      if (velocity > VELOCITY_EPSILON) {
-        video.play().catch(() => {});
-        video.playbackRate = rate;
-      }
     }
+
+    if (video.paused) video.play().catch(() => {});
+    video.playbackRate = rate;
+  }
+
+  function requestHandoff() {
+    if (handoffPending) return;
+    const nextIndex = (activeIndex + 1) % rooms.length;
+    const slotBefore = activeSlot;
+    switchToRoom(nextIndex, 0);
+    // Latch only if the switch is still pending - a synchronous swap already
+    // moved activeSlot and needs no latch.
+    handoffPending = activeIndex === nextIndex && activeSlot === slotBefore;
   }
 
   function backwardSeekStep() {
