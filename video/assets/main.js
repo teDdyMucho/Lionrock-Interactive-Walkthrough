@@ -77,9 +77,10 @@
   /* ---------- continuous playback ---------- */
 
   /* Plays room after room without stopping, wrapping past the last room back to
-     the intro. Uses the same walkToken as goToRoom, so a nav click or gesture
-     interrupts it mid-clip; goToRoom then hands control back here when its walk
-     finishes, resuming from the room after the one it landed on. */
+     the intro, for as long as nobody interacts. Uses the same walkToken as
+     goToRoom, so the first nav click or gesture interrupts it mid-clip and hands
+     control to the viewer for the rest of the session - see the note in
+     goToRoom's `finally` for why it isn't resumed afterwards. */
   async function autoRun(startIndex) {
     // playClip resolves instantly for a room with no clip, so with nothing
     // playable at all this would spin forever. Nothing to run: stay put.
@@ -355,11 +356,11 @@
             if (superseded()) return;
           }
           // What follows the room we're entering: either reversing straight back
-          // out of it again, or - on the last leg - whatever continuous playback
-          // will resume with.
+          // out of it again, or - on the last leg - the target's own reverse
+          // clip, which is what another backward gesture would play next.
           const after = i - 1 > target
             ? rooms[i - 1].reverse
-            : rooms[(target + 1) % rooms.length].video;
+            : rooms[target].reverse;
           await playClip(entering, after);   // then walk into room i-1
           if (superseded()) return;
           activeIndex = i - 1;
@@ -371,9 +372,11 @@
       // must not unlock the nav out from under the one that replaced it.
       if (!superseded()) {
         setNavBusy(false);
-        // The target's clip has already played to its end, so continuous
-        // playback picks up at the room AFTER it rather than replaying it.
-        autoRun((activeIndex + 1) % rooms.length);
+        /* Deliberately NOT resuming continuous playback here. A click or gesture
+           means "take me here and stay", so the walk holds on the target's last
+           frame. Resuming would advance to the next room immediately, which
+           silently undoes every backward move: going Dining -> Living landed on
+           Living correctly and was then walked straight back into Dining. */
       }
     }
   }
