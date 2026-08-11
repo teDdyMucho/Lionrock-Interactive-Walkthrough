@@ -10,14 +10,18 @@
   // per second matters more for smoothness there than it does on a desktop GPU.
   const IS_TOUCH_DEVICE = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
 
-  const SCRUB_SENSITIVITY = 0.00032;              // velocity impulse per wheel delta unit
-  const TOUCH_SENSITIVITY = 0.0009;               // velocity impulse per pixel of touch swipe
-  const FRICTION = 0.9;                           // per-frame velocity decay (0-1, higher = glides longer)
-  const MAX_VELOCITY = IS_TOUCH_DEVICE ? 0.08 : 0.15; // forward cap - just becomes a playbackRate, so generous is fine
+  // How far one flick travels is roughly velocity / (1 - FRICTION), then capped by
+  // MAX_PLAYBACK_RATE. Both matter: sensitivity alone barely moves the needle,
+  // because a single trackpad flick fires dozens of wheel events and pins velocity
+  // at MAX_VELOCITY within the first few regardless.
+  const SCRUB_SENSITIVITY = 0.0006;               // velocity impulse per wheel delta unit
+  const TOUCH_SENSITIVITY = 0.0018;               // velocity impulse per pixel of touch swipe
+  const FRICTION = 0.94;                          // per-frame velocity decay (0-1, higher = glides longer)
+  const MAX_VELOCITY = IS_TOUCH_DEVICE ? 0.12 : 0.15; // forward cap - just becomes a playbackRate, so generous is fine
   // Backward has no real playback, only seeking, so its jumps cost real decode time -
   // capped tighter than forward so each seek is smaller/cheaper, at the cost of feeling
   // more limited when flicking hard backward.
-  const MAX_BACKWARD_VELOCITY = IS_TOUCH_DEVICE ? 0.03 : 0.05;
+  const MAX_BACKWARD_VELOCITY = IS_TOUCH_DEVICE ? 0.05 : 0.08;
   const VELOCITY_EPSILON = 0.0004;                // velocity below this is treated as stopped
   // Seeks are decoder-paced (see seekActivePaced), so this is only about how
   // much drift is worth a seek at all. Slightly larger than a single frame -
@@ -27,7 +31,10 @@
   // rate up to this floor and continuing to "play" a near-frozen video for a long
   // tail, forward motion just stops outright once decaying velocity would cross it.
   const MIN_PLAYBACK_RATE = 0.35;                 // forward motion: real <video> playback, not seeking
-  const MAX_PLAYBACK_RATE = 3;                    // (there's no such thing as reverse playback, so
+  // The real ceiling on forward speed: rate is velocity * 60, so anything above
+  // MAX_PLAYBACK_RATE / 60 of velocity is just headroom that sustains top speed
+  // for longer. Kept lower on touch - mobile decoders drop frames at high rates.
+  const MAX_PLAYBACK_RATE = IS_TOUCH_DEVICE ? 5 : 6; // (there's no such thing as reverse playback, so
                                                    // backward motion still has to seek - see easeLoop)
   const ROOM_END_EPSILON = 0.05;                   // seconds from a clip's end that counts as "arrived"
   const GLIDE_EASE = 0.12;                        // how quickly a nav/dot jump eases into its target
