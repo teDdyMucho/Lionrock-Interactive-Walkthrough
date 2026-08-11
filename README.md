@@ -451,7 +451,12 @@ playing a **pre-rendered reversed copy forwards**:
 - Skipping several rooms chains the same rule, so the path stays continuous
   rather than cutting.
 
-**Scroll and swipe** also move between rooms: one gesture = one room, in the
+**Nothing advances on its own.** The opening room plays once and holds on its
+last frame; every move after that is the viewer's — scroll, swipe, click, or
+arrow key. (An earlier build looped through every room back-to-back, which took
+the pacing away from the viewer and made it impossible to linger.)
+
+**Scroll and swipe** move between rooms: one gesture = one room, in the
 same direction as the Interactive tab (**down/swipe-up = next**, up = previous).
 Arrow and Page keys work too. Each gesture is locked until its transition
 finishes rather than on a timer, so one wheel flick — which fires dozens of

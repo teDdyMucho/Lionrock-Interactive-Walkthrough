@@ -66,42 +66,15 @@
     revealSite();
     wireScrubInput();   // scroll/swipe/arrow keys move between rooms
 
-    // Continuous playback: every room plays back-to-back at a constant rate and
-    // wraps around to the intro forever. Deliberately not awaited - it never
-    // resolves.
-    autoRun(0);
+    // Play the opening room once, then hold on its last frame. Moving on is
+    // the viewer's decision — scroll, swipe, or click. (There used to be an
+    // autoRun loop that walked every room back-to-back on a timer; it took the
+    // pacing away from the viewer, who couldn't linger in a room.)
+    activeIndex = 0;
+    highlight(0);
+    await playClip(rooms[0].video, rooms[1] && rooms[1].video);
 
     maybeShowGuide();
-  }
-
-  /* ---------- continuous playback ---------- */
-
-  /* Plays room after room without stopping, wrapping past the last room back to
-     the intro, for as long as nobody interacts. Uses the same walkToken as
-     goToRoom, so the first nav click or gesture interrupts it mid-clip and hands
-     control to the viewer for the rest of the session - see the note in
-     goToRoom's `finally` for why it isn't resumed afterwards. */
-  async function autoRun(startIndex) {
-    // playClip resolves instantly for a room with no clip, so with nothing
-    // playable at all this would spin forever. Nothing to run: stay put.
-    if (!rooms.some((room) => room.video)) return;
-
-    const myWalk = ++walkToken;
-    let index = startIndex;
-
-    while (myWalk === walkToken) {
-      activeIndex = index;
-      highlight(index);
-
-      // Hand the next clip to playClip so it can buffer on the free slot while
-      // this one is on screen - without that, every room boundary waits on a
-      // `canplay` and the walkthrough visibly hitches between rooms.
-      const next = (index + 1) % rooms.length;
-      await playClip(rooms[index].video, rooms[next].video);
-      if (myWalk !== walkToken) return;   // superseded by a click/gesture
-
-      index = next;
-    }
   }
 
   function applyChrome(property) {
@@ -370,14 +343,9 @@
     } finally {
       // Only the newest walk owns the nav state — an old, superseded loop
       // must not unlock the nav out from under the one that replaced it.
-      if (!superseded()) {
-        setNavBusy(false);
-        /* Deliberately NOT resuming continuous playback here. A click or gesture
-           means "take me here and stay", so the walk holds on the target's last
-           frame. Resuming would advance to the next room immediately, which
-           silently undoes every backward move: going Dining -> Living landed on
-           Living correctly and was then walked straight back into Dining. */
-      }
+      // The walk holds on the target's last frame; the viewer decides when to
+      // move on.
+      if (!superseded()) setNavBusy(false);
     }
   }
 
