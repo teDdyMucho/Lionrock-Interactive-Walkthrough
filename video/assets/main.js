@@ -66,14 +66,41 @@
     revealSite();
     wireScrubInput();   // scroll/swipe/arrow keys move between rooms
 
-    // Open on the first room: play it through once, then hold on its last
-    // frame waiting for a nav click.
-    await playClip(rooms[0].video);
-    highlight(0);
+    // Continuous playback: every room plays back-to-back at a constant rate and
+    // wraps around to the intro forever. Deliberately not awaited - it never
+    // resolves.
+    autoRun(0);
 
-    // Guide comes after the opening clip, so it explains the controls over a
-    // settled frame rather than competing with the video for attention.
     maybeShowGuide();
+  }
+
+  /* ---------- continuous playback ---------- */
+
+  /* Plays room after room without stopping, wrapping past the last room back to
+     the intro. Uses the same walkToken as goToRoom, so a nav click or gesture
+     interrupts it mid-clip; goToRoom then hands control back here when its walk
+     finishes, resuming from the room after the one it landed on. */
+  async function autoRun(startIndex) {
+    // playClip resolves instantly for a room with no clip, so with nothing
+    // playable at all this would spin forever. Nothing to run: stay put.
+    if (!rooms.some((room) => room.video)) return;
+
+    const myWalk = ++walkToken;
+    let index = startIndex;
+
+    while (myWalk === walkToken) {
+      activeIndex = index;
+      highlight(index);
+
+      // Hand the next clip to playClip so it can buffer on the free slot while
+      // this one is on screen - without that, every room boundary waits on a
+      // `canplay` and the walkthrough visibly hitches between rooms.
+      const next = (index + 1) % rooms.length;
+      await playClip(rooms[index].video, rooms[next].video);
+      if (myWalk !== walkToken) return;   // superseded by a click/gesture
+
+      index = next;
+    }
   }
 
   function applyChrome(property) {
@@ -309,7 +336,8 @@
       if (target > activeIndex) {
         // Forward: just play each room's forward clip in turn.
         for (let i = activeIndex + 1; i <= target; i++) {
-          await playClip(rooms[i].video);
+          const after = rooms[(i + 1) % rooms.length];
+          await playClip(rooms[i].video, after && after.video);
           if (superseded()) return;
           activeIndex = i;
           highlight(i);
@@ -321,11 +349,18 @@
         // leave the viewer looking at the wrong room.
         for (let i = activeIndex; i > target; i--) {
           const back = rooms[i].reverse;
+          const entering = rooms[i - 1].video;
           if (back) {
-            await playClip(back);            // walk back out of room i
+            await playClip(back, entering);  // walk back out of room i
             if (superseded()) return;
           }
-          await playClip(rooms[i - 1].video); // then walk into room i-1
+          // What follows the room we're entering: either reversing straight back
+          // out of it again, or - on the last leg - whatever continuous playback
+          // will resume with.
+          const after = i - 1 > target
+            ? rooms[i - 1].reverse
+            : rooms[(target + 1) % rooms.length].video;
+          await playClip(entering, after);   // then walk into room i-1
           if (superseded()) return;
           activeIndex = i - 1;
           highlight(activeIndex);
@@ -334,13 +369,22 @@
     } finally {
       // Only the newest walk owns the nav state — an old, superseded loop
       // must not unlock the nav out from under the one that replaced it.
-      if (!superseded()) setNavBusy(false);
+      if (!superseded()) {
+        setNavBusy(false);
+        // The target's clip has already played to its end, so continuous
+        // playback picks up at the room AFTER it rather than replaying it.
+        autoRun((activeIndex + 1) % rooms.length);
+      }
     }
   }
 
   /* Plays one clip start to finish on the standby slot, swaps it in, and
-     resolves when it ends (holding on the last frame). */
-  function playClip(remoteUrl) {
+     resolves when it ends (holding on the last frame).
+
+     `nextUrl`, when given, is buffered on the freed-up slot as soon as this clip
+     is on screen, so the following playClip finds it already decodable and
+     starts instantly instead of waiting on `canplay`. */
+  function playClip(remoteUrl, nextUrl) {
     const startedAt = walkToken;   // so an interrupted clip can stop waiting
 
     return new Promise((resolve) => {
@@ -352,6 +396,7 @@
 
       const start = () => {
         standby.el.currentTime = 0;
+        standby.el.playbackRate = 1;   // every clip plays at the same speed
 
         // Swap only once the new clip has actually painted its first frame.
         // Swapping on play() alone can show a blank element for a frame or two,
@@ -360,6 +405,7 @@
           slots[activeSlot].el.classList.remove('active');
           standby.el.classList.add('active');
           activeSlot = standbyIdx;
+          prewarm(nextUrl);   // the slot just vacated buffers what comes next
         };
 
         if (typeof standby.el.requestVideoFrameCallback === 'function') {
@@ -396,6 +442,18 @@
         standby.el.load();
       }
     });
+  }
+
+  /* Loads a clip onto whichever slot isn't on screen, so it's decodable before
+     it's needed. No-op if that slot already holds it. */
+  function prewarm(remoteUrl) {
+    if (!remoteUrl) return;
+    const src = localSrc(remoteUrl);
+    const standby = slots[1 - activeSlot];
+    if (standby.src === src) return;
+    standby.src = src;
+    standby.el.src = src;
+    standby.el.load();
   }
 
   /* ---------- loading ---------- */
