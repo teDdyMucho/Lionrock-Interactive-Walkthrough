@@ -249,18 +249,13 @@
     }
   }
 
-  /* A nav/dot click lands in the target room immediately, then plays a short
-     stretch of it so the arrival has movement rather than being a hard cut.
-
-     The old behaviour glided across the whole timeline, seeking frame by frame
-     through every room in between — ~10 decodes for a 3-room jump, which read
-     as a hang. Switching rooms first and animating only *inside* the target
-     keeps the motion while skipping the expensive part.
+  /* A nav/dot click shows that room's clip, full stop. No transition, no glide,
+     no play-in: the point of the nav is to answer "show me this room", and any
+     animation between the click and the answer just delays it and creates a
+     window where the previous room is still what you're looking at.
 
      (Scrolling is untouched: that still scrubs frame by frame, which is the
      point of this player.) */
-  const JUMP_PLAY_SECONDS = 1.1;   // how much of the target room to play on arrival
-
   function jumpToRoom(index) {
     velocity = 0;
     glideTarget = null;
@@ -269,21 +264,8 @@
     if (!room) return;
 
     globalCurrent = clamp(room.cumStart, 0, totalDuration);
-    highlightActive(index);
-
-    // The glide is armed from inside the swap callback, NOT here. A clicked room
-    // is almost never the prewarmed neighbour, so its <video> has to load first
-    // and the swap lands several frames later. Arming the glide immediately ran
-    // the whole 1.1s of it against the OUTGOING room's element - which played,
-    // or rewound and re-scrubbed, the room you were already in instead of
-    // moving to the one you clicked.
-    switchToRoom(index, 0, () => {
-      // Land at the room's start, then glide a little way into it. Forward
-      // motion plays the video for real (browser-decoded, smooth), not seeking.
-      globalCurrent = clamp(room.cumStart, 0, totalDuration);
-      const runTo = Math.min(JUMP_PLAY_SECONDS, Math.max(0, room.duration - 0.1));
-      if (runTo > 0.05) glideTarget = clamp(room.cumStart + runTo, 0, totalDuration);
-    });
+    highlightActive(index);   // nav answers the click straight away
+    switchToRoom(index, 0);   // and the clicked room's own clip goes on screen
   }
 
   function highlightActive(index) {
@@ -480,11 +462,7 @@
   // spot. Only the most recent request's callback is allowed to apply itself.
   let swapToken = 0;
 
-  /* `onSwapped` fires only once the target room is genuinely the on-screen
-     element. Anything that wants to act on the new room - playing it, seeking
-     it, gliding into it - has to wait for that, because until then activeIndex
-     points at the new room while activeSlot still shows the old one. */
-  function switchToRoom(index, localTime, onSwapped) {
+  function switchToRoom(index, localTime) {
     // The site reveals after room 1, so a later room can still be downloading.
     // Staying put beats swapping to an empty <video> and showing black.
     if (!rooms[index] || !rooms[index].blobUrl) return;
@@ -511,7 +489,6 @@
       activeSlot = standbyIdx;
       highlightActive(index);
       prewarmNeighbor();
-      if (onSwapped) onSwapped();
     };
 
     if (standby.roomIndex === index) {
