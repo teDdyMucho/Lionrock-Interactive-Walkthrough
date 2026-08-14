@@ -3,6 +3,18 @@
 
 # Each project's videos/content get their own header block, scoped to its own
 # subfolder - add a matching pair here when a new project is added.
+# Player code must never be served stale - a cached main.js makes fixes look
+# like they did nothing. The clips are the big download; the JS is a few KB.
+[[headers]]
+  for = "/walkthrough/assets/*"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/video/assets/*"
+  [headers.values]
+    Cache-Control = "no-cache"
+
 [[headers]]
   for = "/2209-Branch-Ave-Anoka-MN-55303/videos/*"
   [headers.values]
