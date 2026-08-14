@@ -356,11 +356,15 @@
       standby.el.src = rooms[index].blobUrl;
       standby.el.load();
       standby.el.addEventListener('loadedmetadata', finishSwap, { once: true });
-      // If the clip fails to load, loadedmetadata never fires and the handoff
-      // latch would stay on forever, wedging forward motion at this boundary.
-      // Release it so the next frame can retry.
+      // If the clip fails to load, loadedmetadata never fires - the swap would
+      // stay "in flight" forever and freeze the whole engine. Give up on it and
+      // fall back to whatever is genuinely on screen.
       standby.el.addEventListener('error', () => {
-        if (myToken === swapToken) handoffPending = false;
+        if (myToken !== swapToken) return;
+        handoffPending = false;
+        standby.roomIndex = -1;                      // holds nothing usable
+        activeIndex = slots[activeSlot].roomIndex;   // stay with the visible room
+        highlightActive(activeIndex);
       }, { once: true });
     }
   }
@@ -473,6 +477,11 @@
 
   function activeVideo() { return slots[activeSlot].el; }
 
+  /* True while a switchToRoom is still waiting on loadedmetadata: activeIndex
+     has already moved to the new room, but the element on screen is still the
+     old one. Playing or seeking during that window hits the wrong clip. */
+  function swapInFlight() { return slots[activeSlot].roomIndex !== activeIndex; }
+
   function pauseActive() {
     const video = activeVideo();
     if (!video.paused) video.pause();
@@ -484,6 +493,9 @@
       switchToRoom(index, localTime);
       return;
     }
+    // activeIndex matches, but the swap onto it may not have landed - seeking
+    // now would scrub the outgoing room's clip.
+    if (swapInFlight()) return;
     const video = activeVideo();
     // skip while a previous seek is still resolving - firing a new one before the
     // decoder catches up is what made playback look choppy/low-framerate
@@ -567,7 +579,11 @@
 
   function easeLoop() {
     if (totalDuration) {
-      if (glideTarget !== null) {
+      if (swapInFlight()) {
+        // Room switch still resolving. The element on screen belongs to the
+        // room we're leaving, so hold this frame out rather than driving it.
+        pauseActive();
+      } else if (glideTarget !== null) {
         pauseActive();
         globalCurrent += (glideTarget - globalCurrent) * GLIDE_EASE;
         if (Math.abs(glideTarget - globalCurrent) < GLIDE_EPSILON) {
