@@ -57,15 +57,37 @@
     revealSite();
     wireScrubInput();   // scroll/swipe/arrow keys move between rooms
 
-    // Play the opening room once, then hold on its last frame. Moving on is
-    // the viewer's decision — scroll, swipe, or click. (There used to be an
-    // autoRun loop that walked every room back-to-back on a timer; it took the
-    // pacing away from the viewer, who couldn't linger in a room.)
-    activeIndex = 0;
-    highlight(0);
-    await playClip(rooms[0].video, rooms[1] && rooms[1].video);
+    // Opening a property plays the tour on its own, room after room, looping
+    // back to the first. Deliberately not awaited - it never resolves.
+    autoRun(0);
 
     maybeShowGuide();
+  }
+
+  /* Plays every room back-to-back, wrapping past the last one to the first, for
+     as long as nobody interacts. Shares walkToken with goToRoom, so the first
+     click/scroll/swipe cancels it mid-clip and hands pacing to the viewer -
+     from then on they drive, and the player holds wherever they put it. */
+  async function autoRun(startIndex) {
+    // playClip resolves instantly for a room with no clip, so with nothing
+    // playable this would spin forever.
+    if (!rooms.some((room) => room.video)) return;
+
+    const myRun = walkToken += 1;
+    let index = startIndex;
+
+    while (myRun === walkToken) {
+      activeIndex = index;
+      highlight(index);
+
+      // Hand the next clip over so it buffers on the free slot while this one
+      // is on screen - otherwise every room boundary waits on a `canplay`.
+      const next = (index + 1) % rooms.length;
+      await playClip(rooms[index].video, rooms[next].video);
+      if (myRun !== walkToken) return;   // superseded by a click or gesture
+
+      index = next;
+    }
   }
 
   function applyChrome(property) {
