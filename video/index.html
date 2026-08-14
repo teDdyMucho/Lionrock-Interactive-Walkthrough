@@ -62,12 +62,15 @@
   </div>
 
   <header id="site-header">
-    <a href="/" id="brand-link" class="brand">
+    <!-- Logo only, deliberately not a link: the home button is disabled here so
+         the walkthrough can't be left by clicking the brand. Kept as #brand-link
+         so the header layout and CSS are unchanged. -->
+    <span id="brand-link" class="brand">
       <img src="/assets/img/lion-rock-logo.png" alt="Lion Rock">
-    </a>
+    </span>
+    <!-- No back/gallery link: this player has no way out by design. -->
     <div id="header-right">
       <nav id="room-nav" aria-label="Room navigation"></nav>
-      <a href="/" id="back-to-gallery" title="Back to gallery">← Gallery</a>
     </div>
   </header>
 
@@ -84,7 +87,7 @@
     <p id="footer-note"></p>
   </div>
 
-  <!-- First-visit guide: four steps, dismissed by tapping/clicking anywhere -->
+  <!-- First-visit guide: three steps, dismissed by tapping/clicking anywhere -->
   <div id="guide">
     <div class="guide-step" data-step="0">
       <svg class="guide-mouse" viewBox="0 0 60 110" fill="none" stroke="currentColor" aria-hidden="true">
@@ -110,15 +113,10 @@
       <p class="guide-text" id="guide-text-1">Scroll Up to Go Back</p>
     </div>
 
-    <!-- Steps 3 & 4 point at real controls, so they're anchored, not centred -->
+    <!-- Step 3 points at a real control, so it's anchored, not centred -->
     <div class="guide-step guide-pointer" data-step="2" id="guide-nav">
       <div class="guide-ring"></div>
       <p class="guide-text">Click to jump<br>straight to a Room</p>
-    </div>
-
-    <div class="guide-step guide-pointer" data-step="3" id="guide-gallery">
-      <div class="guide-ring"></div>
-      <p class="guide-text">Click to return<br>to Gallery</p>
     </div>
 
     <p class="guide-hint" id="guide-hint">Click anywhere to continue</p>
@@ -130,6 +128,6 @@
        main.js and code changes appear to do nothing. Bump it on every JS edit. -->
   <script src="/walkthrough/assets/video-cache.js?v=2"></script>
   <script src="/video/assets/rooms-source.js?v=3"></script>
-  <script src="/video/assets/main.js?v=4"></script>
+  <script src="/video/assets/main.js?v=5"></script>
 </body>
 </html>
