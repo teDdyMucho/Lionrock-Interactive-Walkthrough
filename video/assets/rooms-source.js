@@ -1,10 +1,8 @@
 /* Supplies the Video Walkthrough with its rooms.
  *
- * Same properties and areas as the Interactive walkthrough — this just also
- * reads `reverse_url`, the pre-rendered backwards clip that makes moving to an
- * earlier room possible without seeking.
+ * Same properties and areas as the Interactive walkthrough.
  *
- * Returns: { property, rooms: [{ label, video, reverse }] }
+ * Returns: { property, rooms: [{ label, video }] }
  */
 
 async function loadVideoRooms() {
@@ -34,30 +32,13 @@ async function loadVideoRooms() {
   if (pErr) throw new WalkthroughError(`Couldn't load this property: ${pErr.message}`);
   if (!property) throw new WalkthroughError(`No property found for "${slug}".`);
 
-  // reverse_url arrives with migration 005. Selecting it before that migration
-  // has run would 400 the whole query, so fall back to forward-only rather
-  // than breaking the page.
-  let rows = null;
-  let hasReverse = true;
-
-  const full = await db
+  const { data: rows, error: vErr } = await db
     .from('property_videos')
-    .select('area, label, video_url, reverse_url, sort_order')
+    .select('area, label, video_url, sort_order')
     .eq('property_id', property.id)
     .order('sort_order');
 
-  if (full.error) {
-    hasReverse = false;
-    const basic = await db
-      .from('property_videos')
-      .select('area, label, video_url, sort_order')
-      .eq('property_id', property.id)
-      .order('sort_order');
-    if (basic.error) throw new WalkthroughError(`Couldn't load the rooms: ${basic.error.message}`);
-    rows = basic.data;
-  } else {
-    rows = full.data;
-  }
+  if (vErr) throw new WalkthroughError(`Couldn't load the rooms: ${vErr.message}`);
 
   const withVideo = (rows || []).filter((r) => r.video_url);
   const intro = withVideo.find((r) => r.area === 'intro');
@@ -70,7 +51,6 @@ async function loadVideoRooms() {
   }
 
   return {
-    hasReverse,
     property: {
       title: property.title,
       address: property.address || '',
@@ -80,11 +60,7 @@ async function loadVideoRooms() {
         'This is a Virtual Stage of the Advertized Unit. Actual lighting, ' +
         'colors, and ambiance may vary on different screen.',
     },
-    rooms: usable.map((r) => ({
-      label: r.label,
-      video: r.video_url,
-      reverse: r.reverse_url || null,
-    })),
+    rooms: usable.map((r) => ({ label: r.label, video: r.video_url })),
   };
 }
 

@@ -8,16 +8,13 @@
 <link rel="stylesheet" href="/walkthrough/assets/guide.css">
 <meta name="theme-color" content="#0c0c0c">
 <style>
-  /* This player is click-driven, not scroll-driven: no scrub engine, no dot
-     nav. Rooms are entered by clicking the header nav, and the transition
-     between them is a real video that plays forwards. */
+  /* This player is click-driven: clicking a room in the header plays that
+     room's clip. No scrub engine. */
   html,body{ overflow:hidden; }
 
   /* No crossfade between clips. Every clip is a preloaded blob, so the swap is
-     instant anyway — and a 0.25s fade meant the first quarter-second of each
-     clip played while still transparent. On a short reverse clip that read as
-     "the reverse never played", because the visible part was already the next
-     forward clip. */
+     instant anyway — and a fade meant the first quarter-second of each clip
+     played while still transparent. */
   #stage video{
     position:absolute; inset:0;
     width:100%; height:100%;
@@ -25,11 +22,6 @@
     opacity:0;
   }
   #stage video.active{ opacity:1; }
-
-  /* The nav stays clickable while a clip plays — a new click takes over from
-     the walk in progress (see walkToken in main.js). `pending` just marks
-     where the current walk is heading. */
-  #room-nav a.busy.pending{ opacity:1; text-decoration:underline; text-underline-offset:6px; }
 
   #walkthrough-error{
     position:fixed; inset:0; z-index:1200;
@@ -137,7 +129,7 @@
   <!-- ?v= is a cache buster: without it the browser and CDN keep serving an old
        main.js and code changes appear to do nothing. Bump it on every JS edit. -->
   <script src="/walkthrough/assets/video-cache.js?v=2"></script>
-  <script src="/video/assets/rooms-source.js?v=2"></script>
-  <script src="/video/assets/main.js?v=2"></script>
+  <script src="/video/assets/rooms-source.js?v=3"></script>
+  <script src="/video/assets/main.js?v=3"></script>
 </body>
 </html>

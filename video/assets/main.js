@@ -1,17 +1,9 @@
 /* Lion Rock — Video Walkthrough
  *
- * Click-driven, not scroll-driven. Each room has a forward clip and (once
- * uploaded) a pre-rendered reversed clip, because no browser can play a
- * <video> backwards.
+ * Click-driven. One rule: click a room, that room's clip plays, start to finish,
+ * then holds on its last frame. Same in both directions, however far you jump.
  *
- * The rule, from the spec:
- *   • Click a LATER room  → play that room's forward clip.
- *   • Click an EARLIER room → play the CURRENT room's reversed clip first,
- *     then the target's forward clip. Walking back out of the room you're in,
- *     then into the one you asked for.
- *
- * Moving more than one room away chains the same logic, so going from Bedroom 2
- * back to Living reverses out through each room in between.
+ * Scroll/swipe/arrow keys step one room at a time through the same path.
  */
 
 (() => {
@@ -31,8 +23,7 @@
 
   let rooms = [];
   let activeIndex = 0;
-  let busy = false;          // a transition is playing (nav shows a destination)
-  let walkToken = 0;         // bumped per click; an older walk sees it and stops
+  let walkToken = 0;         // bumped per click; an older clip sees it and stops
 
   // Remote URL -> local blob: URL, filled by preload(). Playback reads from
   // here so a clip never has to be fetched mid-walk.
@@ -136,17 +127,6 @@
       room.dotRow.classList.add(
         i === index ? 'active' : i < index ? 'label-above' : 'label-below'
       );
-    });
-  }
-
-  /* Locks the nav while a clip plays. `pending` marks the room being travelled
-     to, so the viewer can see where the walk is heading before it arrives. */
-  function setNavBusy(state, pendingIndex) {
-    busy = state;
-    rooms.forEach((room, i) => {
-      if (!room.navLink) return;
-      room.navLink.classList.toggle('busy', state);
-      room.navLink.classList.toggle('pending', state && i === pendingIndex);
     });
   }
 
@@ -287,66 +267,34 @@
     });
   }
 
-  /* ---------- the transition rule ---------- */
+  /* ---------- navigation ---------- */
 
+  /* Click a room, play that room. Nothing else.
+
+     This used to chain: clicking a room three away played every clip in between,
+     and going backward played a pre-rendered reversed clip out of the current
+     room first. That's why clicking Kitchen from Living showed Dining - Dining
+     was an intermediate leg, not a bug in the mapping. The nav means "show me
+     this room", so it now plays exactly the clip the label points at. */
   async function goToRoom(target) {
-    if (target === activeIndex) return;
+    if (!rooms[target]) return;
 
-    // A click during a walk takes over: the running walk is cancelled and a new
-    // one starts from wherever we've actually reached. The token is how the old
-    // loop finds out — it can't be aborted mid-await, so it checks after every
-    // clip and bails if it's been superseded.
-    const myWalk = ++walkToken;
+    // A newer click supersedes the clip in flight. It can't be aborted
+    // mid-await, so playClip watches this token and resolves if it's replaced.
+    walkToken += 1;
 
     // Stop whatever is mid-play, so the interrupted clip doesn't keep running
-    // (and firing 'ended') underneath the new walk.
+    // (and firing 'ended') underneath the new one.
     slots.forEach((s) => { if (!s.el.paused) s.el.pause(); });
 
-    setNavBusy(true, target);
+    // The nav answers the click straight away - before the clip loads - so it
+    // always shows what you actually clicked.
+    activeIndex = target;
+    highlight(target);
 
-    const superseded = () => myWalk !== walkToken;
-
-    try {
-      if (target > activeIndex) {
-        // Forward: just play each room's forward clip in turn.
-        for (let i = activeIndex + 1; i <= target; i++) {
-          const after = rooms[(i + 1) % rooms.length];
-          await playClip(rooms[i].video, after && after.video);
-          if (superseded()) return;
-          activeIndex = i;
-          highlight(i);
-        }
-      } else {
-        // Backward, per the spec: play the reversed clip of the room being
-        // LEFT (walking back out of it), then the forward clip of the room
-        // being ENTERED. Both, in that order — playing only the reverse would
-        // leave the viewer looking at the wrong room.
-        for (let i = activeIndex; i > target; i--) {
-          const back = rooms[i].reverse;
-          const entering = rooms[i - 1].video;
-          if (back) {
-            await playClip(back, entering);  // walk back out of room i
-            if (superseded()) return;
-          }
-          // What follows the room we're entering: either reversing straight back
-          // out of it again, or - on the last leg - the target's own reverse
-          // clip, which is what another backward gesture would play next.
-          const after = i - 1 > target
-            ? rooms[i - 1].reverse
-            : rooms[target].reverse;
-          await playClip(entering, after);   // then walk into room i-1
-          if (superseded()) return;
-          activeIndex = i - 1;
-          highlight(activeIndex);
-        }
-      }
-    } finally {
-      // Only the newest walk owns the nav state — an old, superseded loop
-      // must not unlock the nav out from under the one that replaced it.
-      // The walk holds on the target's last frame; the viewer decides when to
-      // move on.
-      if (!superseded()) setNavBusy(false);
-    }
+    // Buffer the following room so a forward gesture from here starts instantly.
+    const after = rooms[target + 1];
+    await playClip(rooms[target].video, after && after.video);
   }
 
   /* Plays one clip start to finish on the standby slot, swaps it in, and
@@ -370,8 +318,7 @@
         standby.el.playbackRate = 1;   // every clip plays at the same speed
 
         // Swap only once the new clip has actually painted its first frame.
-        // Swapping on play() alone can show a blank element for a frame or two,
-        // which on a short reverse clip eats the part you most need to see.
+        // Swapping on play() alone can show a blank element for a frame or two.
         const reveal = () => {
           slots[activeSlot].el.classList.remove('active');
           standby.el.classList.add('active');
@@ -434,17 +381,13 @@
    * Unlike the Interactive tab (which can reveal after clip 1 and stream the
    * rest, because scrubbing moves gradually), this player jumps a whole room
    * per click. A clip that hasn't arrived yet would stall the walk mid-move,
-   * so the loading screen waits for all of them — forward and reversed.
+   * so the loading screen waits for all of them.
    *
    * Each blob is held in memory for the session, so playback never touches the
    * network again. With storage consent they're also written to Cache Storage,
    * making the next visit instant. */
   async function preload() {
-    const urls = [];
-    rooms.forEach((r) => {
-      if (r.video) urls.push(r.video);
-      if (r.reverse) urls.push(r.reverse);
-    });
+    const urls = rooms.map((r) => r.video).filter(Boolean);
     if (!urls.length) return;
 
     // Drop any cached copy of these clips that isn't the current version, so a
