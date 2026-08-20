@@ -205,7 +205,6 @@
       steps.forEach((s, n) => s.classList.toggle('active', n === i));
       // Anchor the pointer steps to the real controls they describe.
       if (i === 2) anchorTo(steps[2], els.nav.querySelector('a:nth-child(2)'));
-      if (i === 3) anchorTo(steps[3], document.getElementById('back-to-gallery'));
     };
 
     const advance = () => {
