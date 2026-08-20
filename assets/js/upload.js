@@ -762,6 +762,14 @@ async function saveRenames() {
 }
 
 /* Saves the property title/address edited at the top of step 2. */
+/* Saves the property title/address edited at the top of step 2.
+
+   Renaming also re-slugs the property, so the shareable link matches the new
+   name instead of keeping the one it was created with. The slug is the URL
+   (`?property=<slug>`) AND the storage folder for every clip, so the existing
+   video URLs are left pointing at the old folder — the files are not moved.
+   That keeps the rename instant and safe; only clips uploaded *after* the
+   rename land in the new folder. */
 async function savePropertyDetails() {
   if (!db || !selectedPropertyId) return;
 
@@ -771,9 +779,18 @@ async function savePropertyDetails() {
   if (!current || !title) return;
   if (title === current.title && address === (current.address || '')) return;
 
+  const patch = { title, address };
+
+  // Only re-slug when the title actually changed, and only to a slug that is
+  // still free — `slug` is unique, and a collision would fail the whole save.
+  if (title !== current.title) {
+    const wanted = await freeSlug(slugify(title), selectedPropertyId);
+    if (wanted) patch.slug = wanted;
+  }
+
   const { error } = await db
     .from('properties')
-    .update({ title, address })
+    .update(patch)
     .eq('id', selectedPropertyId);
 
   if (error) {
@@ -783,6 +800,29 @@ async function savePropertyDetails() {
 
   current.title = title;
   current.address = address;
+  if (patch.slug) current.slug = patch.slug;
+}
+
+/* Returns a slug that no other property is using, appending -2, -3 ... if the
+   plain one is taken. Returns null if the slug is unusable or already ours. */
+async function freeSlug(base, ownId) {
+  if (!base) return null;
+
+  const { data, error } = await db
+    .from('properties')
+    .select('id, slug')
+    .like('slug', `${base}%`);
+
+  if (error) return null;
+
+  const taken = new Set((data || []).filter((r) => r.id !== ownId).map((r) => r.slug));
+  if (!taken.has(base)) return base;
+
+  for (let n = 2; n < 100; n++) {
+    const candidate = `${base}-${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return null;
 }
 
 /* ---------- helpers ---------- */

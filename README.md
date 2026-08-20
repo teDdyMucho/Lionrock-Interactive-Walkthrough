@@ -381,6 +381,12 @@ Step 2 of the upload modal is fully editable:
 - **Remove an area** — the `×` on each slot. Removing one that already has a
   video asks first, then deletes its row.
 - **Property title / address** — editable at the top of step 2.
+  Renaming also updates the **slug**, so the shareable link matches the new
+  name (`?property=ferry-lofts-unit-300`). Collisions get `-2`, `-3`, …
+  Existing clips keep their old storage folder — the files are not moved, so
+  the rename is instant and can't break a video. Only clips uploaded *after*
+  the rename land in the new folder. Note this means **old shared links stop
+  working** once a property is renamed.
 - **Delete a unit** — the `×` on a property in step 1. Requires typing the
   unit's name to confirm. Deletes the property (its `property_videos` rows go
   with it via `ON DELETE CASCADE`) *and* its files in Storage, which Postgres
