@@ -62,15 +62,12 @@
   </div>
 
   <header id="site-header">
-    <!-- Logo only, deliberately not a link: the home button is disabled here so
-         the walkthrough can't be left by clicking the brand. Kept as #brand-link
-         so the header layout and CSS are unchanged. -->
-    <span id="brand-link" class="brand">
+    <a href="/" id="brand-link" class="brand">
       <img src="/assets/img/lion-rock-logo.png" alt="Lion Rock">
-    </span>
-    <!-- No back/gallery link: this player has no way out by design. -->
+    </a>
     <div id="header-right">
       <nav id="room-nav" aria-label="Room navigation"></nav>
+      <a href="/" id="back-to-gallery" title="Back to gallery">← Gallery</a>
     </div>
   </header>
 
@@ -117,6 +114,11 @@
     <div class="guide-step guide-pointer" data-step="2" id="guide-nav">
       <div class="guide-ring"></div>
       <p class="guide-text">Click to jump<br>straight to a Room</p>
+    </div>
+
+    <div class="guide-step guide-pointer" data-step="3" id="guide-gallery">
+      <div class="guide-ring"></div>
+      <p class="guide-text">Click to return<br>to Gallery</p>
     </div>
 
     <p class="guide-hint" id="guide-hint">Click anywhere to continue</p>

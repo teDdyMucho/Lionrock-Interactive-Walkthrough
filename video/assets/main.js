@@ -22,6 +22,7 @@
   };
 
   let rooms = [];
+  let introVideo = null;   // plays once on arrival; not a nav room
   let activeIndex = 0;
   let walkToken = 0;         // bumped per click; an older clip sees it and stops
 
@@ -51,6 +52,7 @@
 
     applyChrome(data.property);
     rooms = data.rooms;
+    introVideo = data.introVideo || null;
     buildNav();
 
     await preload();
@@ -59,15 +61,33 @@
 
     // Opening a property plays the tour on its own, room after room, looping
     // back to the first. Deliberately not awaited - it never resolves.
-    autoRun(0);
+    playIntroThenRun();   // intro (if any) first, then the tour
 
     maybeShowGuide();
   }
 
-  /* Plays every room back-to-back, wrapping past the last one to the first, for
-     as long as nobody interacts. Shares walkToken with goToRoom, so the first
-     click/scroll/swipe cancels it mid-clip and hands pacing to the viewer -
-     from then on they drive, and the player holds wherever they put it. */
+  /* Plays the intro clip once, then starts the room tour. The intro is not a
+     room: no nav entry, no dot, and the tour never loops back to it.
+
+     A click or gesture during the intro cancels it the same way it cancels the
+     tour - walkToken is bumped, so this checks before handing over rather than
+     yanking the viewer out of the room they just chose. */
+  async function playIntroThenRun() {
+    if (introVideo) {
+      const myRun = walkToken += 1;
+      await playClip(introVideo, rooms[0] && rooms[0].video);
+      if (myRun !== walkToken) return;   // viewer took over during the intro
+    }
+    autoRun(0);
+  }
+
+  /* Plays every room back-to-back, then STOPS on the last one, holding its
+     final frame. It does not loop: a tour that restarts on its own gives the
+     viewer no resting point and makes it unclear the unit has been fully seen.
+
+     Shares walkToken with goToRoom, so the first click/scroll/swipe cancels it
+     mid-clip and hands pacing to the viewer - from then on they drive, and the
+     player holds wherever they put it. */
   async function autoRun(startIndex) {
     // playClip resolves instantly for a room with no clip, so with nothing
     // playable this would spin forever.
@@ -82,10 +102,13 @@
 
       // Hand the next clip over so it buffers on the free slot while this one
       // is on screen - otherwise every room boundary waits on a `canplay`.
-      const next = (index + 1) % rooms.length;
-      await playClip(rooms[index].video, rooms[next].video);
+      // No wrap: at the last room `next` is undefined, so nothing is buffered
+      // ahead and the loop ends after this clip.
+      const next = index + 1 < rooms.length ? index + 1 : null;
+      await playClip(rooms[index].video, next !== null ? rooms[next].video : null);
       if (myRun !== walkToken) return;   // superseded by a click or gesture
 
+      if (next === null) return;   // reached the last room: hold here
       index = next;
     }
   }
@@ -182,6 +205,7 @@
       steps.forEach((s, n) => s.classList.toggle('active', n === i));
       // Anchor the pointer steps to the real controls they describe.
       if (i === 2) anchorTo(steps[2], els.nav.querySelector('a:nth-child(2)'));
+      if (i === 3) anchorTo(steps[3], document.getElementById('back-to-gallery'));
     };
 
     const advance = () => {
@@ -290,28 +314,37 @@
 
   /* ---------- navigation ---------- */
 
-  /* Click a room, play that room. Nothing else.
+  /* Click a room and that room plays. Going BACKWARD first plays the current
+     room's pre-rendered reversed clip — walking back out of where you are —
+     then the target's forward clip. Forward is just the target's clip.
 
-     This used to chain: clicking a room three away played every clip in between,
-     and going backward played a pre-rendered reversed clip out of the current
-     room first. That's why clicking Kitchen from Living showed Dining - Dining
-     was an intermediate leg, not a bug in the mapping. The nav means "show me
-     this room", so it now plays exactly the clip the label points at. */
+     The reversed clip exists because no browser can play a <video> backwards.
+     A room with no reverse uploaded falls back to forward-only, so navigation
+     still works, just without the walking-backwards effect. */
   async function goToRoom(target) {
-    if (!rooms[target]) return;
+    if (!rooms[target] || target === activeIndex) return;
 
     // A newer click supersedes the clip in flight. It can't be aborted
     // mid-await, so playClip watches this token and resolves if it's replaced.
-    walkToken += 1;
+    const myWalk = walkToken += 1;
 
     // Stop whatever is mid-play, so the interrupted clip doesn't keep running
     // (and firing 'ended') underneath the new one.
     slots.forEach((s) => { if (!s.el.paused) s.el.pause(); });
 
+    const goingBack = target < activeIndex;
+    const leaving = rooms[activeIndex];
+
     // The nav answers the click straight away - before the clip loads - so it
     // always shows what you actually clicked.
     activeIndex = target;
     highlight(target);
+
+    if (goingBack && leaving && leaving.reverse) {
+      // Walk back out of the room being left, buffering the target meanwhile.
+      await playClip(leaving.reverse, rooms[target].video);
+      if (myWalk !== walkToken) return;   // superseded mid-reverse
+    }
 
     // Buffer the following room so a forward gesture from here starts instantly.
     const after = rooms[target + 1];
@@ -408,7 +441,13 @@
    * network again. With storage consent they're also written to Cache Storage,
    * making the next visit instant. */
   async function preload() {
-    const urls = rooms.map((r) => r.video).filter(Boolean);
+    // Reversed clips are preloaded too, so the first backward move doesn't
+    // stall waiting on a cold network.
+    const urls = [
+      introVideo,
+      ...rooms.map((r) => r.video),
+      ...rooms.map((r) => r.reverse),
+    ].filter(Boolean);
     if (!urls.length) return;
 
     // Drop any cached copy of these clips that isn't the current version, so a

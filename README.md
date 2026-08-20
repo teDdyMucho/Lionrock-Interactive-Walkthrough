@@ -451,10 +451,14 @@ playing a **pre-rendered reversed copy forwards**:
 - Skipping several rooms chains the same rule, so the path stays continuous
   rather than cutting.
 
-**Nothing advances on its own.** The opening room plays once and holds on its
-last frame; every move after that is the viewer's — scroll, swipe, click, or
-arrow key. (An earlier build looped through every room back-to-back, which took
-the pacing away from the viewer and made it impossible to linger.)
+**The tour plays itself, once.** Opening a property plays the intro (if one is
+uploaded) and then every room back-to-back, and **stops on the last room**,
+holding its final frame. It deliberately does not loop: a tour that restarts on
+its own gives the viewer no resting point and makes it unclear the unit has been
+fully seen.
+
+The first click, scroll, or swipe cancels the tour mid-clip and hands pacing to
+the viewer — from then on they drive, and the player holds wherever they put it.
 
 **Scroll and swipe** move between rooms: one gesture = one room, in the
 same direction as the Interactive tab (**down/swipe-up = next**, up = previous).
@@ -595,12 +599,15 @@ selectable prompt.
 
 ### The Intro slot
 
-The upload modal has 8 slots: an optional **Intro** plus the 7 rooms. The intro
-plays first, sits behind the loading bar, and is where the timeline loops back
-to after the last room — it gets no nav link or dot of its own.
+The upload modal has 8 slots: an optional **Intro** plus the 7 rooms.
 
-Leave it empty and the walkthrough simply opens on Exterior. (Don't reuse a room
-clip as the intro: it would then play twice before the walkthrough moves on.)
+**Both players** play the intro once on arrival, before the first room. It is
+never a nav entry or a dot, and the tour never returns to it — it is not a
+room. The loader stays black while downloading, so the intro is the first
+thing the viewer actually sees.
+
+Leave it empty and the walkthrough simply opens on room 1. Don't reuse a
+room's clip as the intro: it would then play twice in a row.
 `intro` needs `supabase/migrations/003-add-intro-video.sql` to be allowed.
 
 `walkthrough/assets/main.js` is a copy of the per-project engine with exactly
