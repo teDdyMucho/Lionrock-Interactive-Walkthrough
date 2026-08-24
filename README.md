@@ -235,6 +235,87 @@ configured.
   `ROOM_AREAS` list in `assets/js/upload.js` — adding an eighth room means
   updating both.
 
+### API — list every walkthrough
+
+`GET /api/walkthroughs` returns every published walkthrough with its shareable
+link. Secured with a shared API key, sent as either header:
+
+```
+Authorization: Bearer <WALKTHROUGH_API_KEY>
+x-api-key: <WALKTHROUGH_API_KEY>
+```
+
+Set `WALKTHROUGH_API_KEY` in **Vercel → Project Settings → Environment
+Variables** (and in `.env` for local use). Generate one with:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Example:
+
+```bash
+curl -H "x-api-key: $WALKTHROUGH_API_KEY" https://your-domain/api/walkthroughs
+```
+
+```json
+{
+  "count": 6,
+  "generatedAt": "2026-08-24T15:07:30.637Z",
+  "walkthroughs": [
+    {
+      "title": "Minnehaha Flats - Unit 10",
+      "address": "3710 Minnehaha Ave Minneapolis, MN 55406",
+      "slug": "minnehaha-flats-unit-10",
+      "type": "video",
+      "url": "https://your-domain/video/?property=minnehaha-flats-unit-10",
+      "path": "/video/?property=minnehaha-flats-unit-10",
+      "hasIntro": true,
+      "roomCount": 7,
+      "rooms": [
+        { "label": "Living", "area": "living", "video": "https://…/living.mp4", "reverse": "https://…/living-reverse.mp4" }
+      ],
+      "createdAt": "2026-08-14T…"
+    }
+  ]
+}
+```
+
+#### Testing it
+
+**Locally, without deploying:**
+
+```bash
+npm run test:api
+```
+
+Starts the handler on a local port, checks every auth path (no key / wrong key
+/ non-GET / both header styles), then prints the walkthrough list. Reads the key
+from `.env`.
+
+**Against a deployment**, once `WALKTHROUGH_API_KEY` is set in Vercel:
+
+```bash
+curl -H "x-api-key: YOUR_KEY" https://your-domain/api/walkthroughs
+
+# should be 401:
+curl -i https://your-domain/api/walkthroughs
+```
+
+**From n8n / another service:** add an HTTP Request node, method `GET`, URL
+`https://your-domain/api/walkthroughs`, and a header `x-api-key` with the key.
+
+Notes:
+
+- `url` is built from the request's own host, so it is correct on any
+  deployment rather than hardcoded to one domain.
+- A property with no playable clip is omitted, matching the gallery.
+- **Fails closed:** if `WALKTHROUGH_API_KEY` is unset the endpoint returns
+  `500` and serves nothing. A missing secret must never mean "no security".
+- Keys are compared in constant time, so a wrong key can't be guessed from
+  response timing.
+- `GET` only; anything else returns `405`.
+
 ### Admin sign-in (`/manage/`)
 
 The gallery's **Upload/Edit** button is hidden unless an admin is signed in.
