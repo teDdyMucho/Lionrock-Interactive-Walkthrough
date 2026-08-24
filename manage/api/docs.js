@@ -195,18 +195,23 @@
         return;
       }
 
-      out.textContent = 'Sending…';
+      // Whatever filters are typed in the box, tolerating a leading "?" or not.
+      const raw = ($('#tryquery').value || '').trim().replace(/^\?/, '');
+      const url = '/api/walkthroughs' + (raw ? `?${raw}` : '');
+
+      out.textContent = `GET ${url}\n\nSending…`;
       btn.disabled = true;
 
       try {
-        const res = await fetch('/api/walkthroughs', { headers: { 'x-api-key': key } });
+        const res = await fetch(url, { headers: { 'x-api-key': key } });
         const text = await res.text();
 
         let pretty = text;
         try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch { /* not JSON */ }
 
         const cls = res.ok ? 'ok' : 'bad';
-        const head = `<span class="${cls}">HTTP ${res.status}</span>\n\n`;
+        // Echo the URL back so it's obvious which filters actually ran.
+        const head = `GET ${escapeHtml(url)}\n<span class="${cls}">HTTP ${res.status}</span>\n\n`;
 
         // A very long list would bury the useful part; show the head of it.
         const body = pretty.length > 4000 ? pretty.slice(0, 4000) + '\n…' : pretty;

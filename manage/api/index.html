@@ -212,13 +212,86 @@
     <pre><code id="ready-curl">Click Reveal above to fill in your key.</code><button class="copy" type="button">Copy</button></pre>
 
     <h2>Try it</h2>
-    <p>Runs a real request from this page using the key above.</p>
-    <button class="btn" type="button" id="tryit">Send test request</button>
+    <p>
+      Runs a real request from this page using the key above. Add filters below
+      to try them out — see <a href="#filters" style="text-decoration:underline;">Filters</a>.
+    </p>
+    <div class="keyrow" style="margin-bottom:12px;">
+      <div class="keybox" style="flex:1 1 340px; padding:0;">
+        <input type="text" id="tryquery" placeholder="?slug=unit-9&amp;includeRooms=false"
+               style="width:100%; background:transparent; border:none; color:#f5f3ee;
+                      font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.78rem;
+                      padding:11px 13px; outline:none;">
+      </div>
+      <button class="btn" type="button" id="tryit">Send request</button>
+    </div>
     <div id="try-output"></div>
+
+    <h2 id="filters">Filters</h2>
+    <p>
+      All optional, all combinable. Add them to the URL as query parameters —
+      the response echoes back which ones were applied.
+    </p>
+
+    <table>
+      <tr><th>Parameter</th><th>Example</th><th>What it does</th></tr>
+      <tr>
+        <td><code>slug</code></td>
+        <td><code>?slug=unit-9</code></td>
+        <td>One specific property. Returns <code>404</code> if that slug doesn't exist, rather than an empty list.</td>
+      </tr>
+      <tr>
+        <td><code>type</code></td>
+        <td><code>?type=video</code></td>
+        <td>Only that tab — <code>video</code> or <code>interactive</code>. Anything else is a <code>400</code>.</td>
+      </tr>
+      <tr>
+        <td><code>search</code></td>
+        <td><code>?search=chicago</code></td>
+        <td>Title, address, or slug contains the text. Case-insensitive.</td>
+      </tr>
+      <tr>
+        <td><code>hasIntro</code></td>
+        <td><code>?hasIntro=true</code></td>
+        <td>Only properties that have (or don't have) an intro clip.</td>
+      </tr>
+      <tr>
+        <td><code>includeRooms</code></td>
+        <td><code>?includeRooms=false</code></td>
+        <td>Drops the <code>rooms</code> array. Much smaller when you only need links — 21KB down to 3KB on the current data. <code>roomCount</code> is still included.</td>
+      </tr>
+      <tr>
+        <td><code>limit</code> / <code>offset</code></td>
+        <td><code>?limit=10&amp;offset=20</code></td>
+        <td>Paging. <code>matched</code> in the response tells you the total before paging.</td>
+      </tr>
+    </table>
+
+    <h3>Combining them</h3>
+    <pre><code># one property, links only — the smallest useful response
+?slug=minnehaha-flats-unit-10&amp;includeRooms=false
+
+# every Chicago Ave unit in the Video tab
+?type=video&amp;search=chicago
+
+# first 10 interactive walkthroughs
+?type=interactive&amp;limit=10</code><button class="copy" type="button">Copy</button></pre>
+
+    <h3>Counts in the response</h3>
+    <table>
+      <tr><th>Field</th><th>Meaning</th></tr>
+      <tr><td><code>count</code></td><td>How many are in <em>this</em> response, after every filter and paging.</td></tr>
+      <tr><td><code>matched</code></td><td>How many matched the filters, before <code>limit</code>/<code>offset</code>.</td></tr>
+      <tr><td><code>total</code></td><td>How many exist in all, before any filter.</td></tr>
+      <tr><td><code>filters</code></td><td>Which filters were applied, or <code>null</code> if none.</td></tr>
+    </table>
 
     <h2>Response</h2>
     <pre><code>{
   "count": 6,
+  "matched": 6,
+  "total": 6,
+  "filters": null,
   "generatedAt": "2026-08-24T15:07:30.637Z",
   "walkthroughs": [
     {

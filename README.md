@@ -281,6 +281,27 @@ curl -H "x-api-key: $WALKTHROUGH_API_KEY" https://your-domain/api/walkthroughs
 }
 ```
 
+#### Filters
+
+All optional and combinable, as query parameters:
+
+| Parameter | Example | Effect |
+|---|---|---|
+| `slug` | `?slug=unit-9` | One property. `404` if the slug does not exist. |
+| `type` | `?type=video` | `video` or `interactive` only; anything else is `400`. |
+| `search` | `?search=chicago` | Title, address, or slug contains the text. |
+| `hasIntro` | `?hasIntro=true` | Only properties with (or without) an intro clip. |
+| `includeRooms` | `?includeRooms=false` | Drops the `rooms` array — 21KB down to 3KB on current data. |
+| `limit` / `offset` | `?limit=10&offset=20` | Paging. |
+
+The response reports `count` (this page), `matched` (before paging), `total`
+(before any filter), and echoes back the `filters` it applied.
+
+Filters run against the assembled list, so every one of them sees the same
+shape the caller gets back. Asking for a `slug` that doesn't exist is a `404`
+rather than an empty list — that means the slug is wrong, which is worth saying
+plainly.
+
 #### Docs page
 
 There is a rendered version of this at **/manage/api/**, linked from the

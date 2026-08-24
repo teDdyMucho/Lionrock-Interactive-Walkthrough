@@ -27,6 +27,23 @@ function safeEqual(a, b) {
   return diff === 0;
 }
 
+/* Query-string params. `req.query` exists on Vercel but not on a bare Node
+   server, so parse the URL instead — the same code then works in both. */
+function query(req) {
+  const i = (req.url || '').indexOf('?');
+  if (i === -1) return {};
+  const out = {};
+  new URLSearchParams(req.url.slice(i + 1)).forEach((v, k) => { out[k] = v; });
+  return out;
+}
+
+/* "false"/"0"/"no" are false; anything else present is true. A bare `?flag`
+   (no value) reads as true, which is what a caller expects. */
+function truthy(v) {
+  if (v === '' || v === undefined || v === null) return true;
+  return !['false', '0', 'no', 'off'].includes(String(v).toLowerCase());
+}
+
 function presentedKey(req) {
   const auth = req.headers.authorization || '';
   if (auth.toLowerCase().startsWith('bearer ')) return auth.slice(7).trim();
@@ -118,10 +135,91 @@ module.exports = async (req, res) => {
       })
       .filter(Boolean);
 
+    /* ---- filters ----
+     *
+     * Applied after building the list so every filter sees the same shape the
+     * caller gets back. All are optional; combining them narrows further.
+     *
+     *   ?slug=unit-9          exactly one property
+     *   ?type=video           only that tab
+     *   ?search=chicago       title/address/slug contains this (case-insensitive)
+     *   ?hasIntro=true        only properties with an intro clip
+     *   ?includeRooms=false   omit the rooms array (smaller payload)
+     *   ?limit=10&offset=20   paging
+     */
+    const q = query(req);
+
+    let results = walkthroughs;
+    const applied = {};
+
+    if (q.slug) {
+      applied.slug = q.slug;
+      results = results.filter((w) => w.slug === q.slug);
+    }
+
+    if (q.type) {
+      const wanted = String(q.type).toLowerCase();
+      if (wanted !== 'video' && wanted !== 'interactive') {
+        return res.status(400).json({
+          error: 'Invalid type',
+          detail: 'type must be "video" or "interactive".',
+        });
+      }
+      applied.type = wanted;
+      results = results.filter((w) => w.type === wanted);
+    }
+
+    if (q.search) {
+      const needle = String(q.search).toLowerCase();
+      applied.search = q.search;
+      results = results.filter((w) =>
+        [w.title, w.address, w.slug]
+          .filter(Boolean)
+          .some((field) => field.toLowerCase().includes(needle))
+      );
+    }
+
+    if (q.hasIntro !== undefined) {
+      const wanted = truthy(q.hasIntro);
+      applied.hasIntro = wanted;
+      results = results.filter((w) => w.hasIntro === wanted);
+    }
+
+    // Total before paging, so a caller can tell how many more there are.
+    const matched = results.length;
+
+    const offset = Math.max(0, parseInt(q.offset, 10) || 0);
+    const limit = q.limit !== undefined ? Math.max(0, parseInt(q.limit, 10) || 0) : null;
+    if (offset) applied.offset = offset;
+    if (limit !== null) applied.limit = limit;
+
+    if (offset) results = results.slice(offset);
+    if (limit !== null) results = results.slice(0, limit);
+
+    // Rooms are the bulk of the payload; a caller that only wants links can drop
+    // them. roomCount stays either way.
+    if (q.includeRooms !== undefined && !truthy(q.includeRooms)) {
+      applied.includeRooms = false;
+      results = results.map(({ rooms, ...rest }) => rest);
+    }
+
+    // Asking for one specific property that doesn't exist is a 404, not an
+    // empty list — it means the slug is wrong, which is worth saying plainly.
+    if (q.slug && !matched) {
+      return res.status(404).json({
+        error: 'No walkthrough with that slug',
+        detail: `Nothing published at slug "${q.slug}".`,
+        slug: q.slug,
+      });
+    }
+
     return res.status(200).json({
-      count: walkthroughs.length,
+      count: results.length,
+      matched,                                  // before limit/offset
+      total: walkthroughs.length,               // before any filter
+      filters: Object.keys(applied).length ? applied : null,
       generatedAt: new Date().toISOString(),
-      walkthroughs,
+      walkthroughs: results,
     });
   } catch (err) {
     return res.status(500).json({ error: 'Unexpected error', detail: String(err && err.message) });
