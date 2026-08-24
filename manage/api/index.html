@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lion Rock — API Documentation</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Inter:wght@400;500;600&display=swap');
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+
+  html,body{
+    min-height:100%;
+    background:#0c0c0c;
+    color:#f5f3ee;
+    font-family:'Inter',sans-serif;
+  }
+  a{ color:inherit; }
+
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:32px 48px;
+    border-bottom:1px solid rgba(245,243,238,.1);
+  }
+  header img{ height:30px; }
+  .back{
+    font-size:.72rem; letter-spacing:.1em; text-transform:uppercase;
+    opacity:.5; text-decoration:none;
+  }
+  .back:hover{ opacity:1; }
+
+  /* Hidden until auth confirms an admin — the key must never be shown to a
+     visitor who simply guessed the URL. */
+  #doc{ display:none; }
+  #doc.ready{ display:block; }
+
+  #gate{
+    display:none;
+    padding:80px 48px;
+    text-align:center;
+    font-size:.9rem; opacity:.6; line-height:1.7;
+  }
+  #gate.show{ display:block; }
+  #gate a{ color:#f5f3ee; }
+
+  main{ max-width:840px; padding:44px 48px 90px; }
+
+  h1{
+    font-family:'Playfair Display',serif;
+    font-weight:500; font-size:1.8rem;
+    margin-bottom:10px;
+  }
+  .lede{ font-size:.9rem; opacity:.55; line-height:1.7; margin-bottom:40px; }
+
+  h2{
+    font-family:'Playfair Display',serif;
+    font-weight:500; font-size:1.15rem;
+    margin:38px 0 12px;
+    padding-top:26px;
+    border-top:1px solid rgba(245,243,238,.1);
+  }
+  h2:first-of-type{ border-top:none; padding-top:0; }
+
+  h3{
+    font-size:.7rem; letter-spacing:.1em; text-transform:uppercase;
+    opacity:.45; margin:22px 0 8px;
+  }
+
+  p{ font-size:.87rem; line-height:1.75; opacity:.75; margin-bottom:14px; }
+
+  code{
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    font-size:.82em;
+    padding:2px 6px;
+    background:rgba(245,243,238,.09);
+    border-radius:2px;
+  }
+
+  pre{
+    position:relative;
+    background:#000;
+    border:1px solid rgba(245,243,238,.14);
+    padding:16px 18px;
+    overflow-x:auto;
+    margin-bottom:16px;
+  }
+  pre code{
+    background:none; padding:0;
+    font-size:.78rem; line-height:1.65;
+    white-space:pre;
+  }
+
+  .copy{
+    position:absolute; top:10px; right:10px;
+    background:rgba(12,12,12,.9);
+    border:1px solid rgba(245,243,238,.2);
+    color:#f5f3ee; cursor:pointer;
+    font-family:'Inter',sans-serif;
+    font-size:.6rem; letter-spacing:.09em; text-transform:uppercase;
+    padding:5px 9px;
+    opacity:0; transition:opacity .2s ease, border-color .2s ease;
+  }
+  pre:hover .copy, .copy:focus-visible{ opacity:1; }
+  .copy:hover{ border-color:rgba(245,243,238,.7); }
+
+  table{ width:100%; border-collapse:collapse; font-size:.83rem; margin-bottom:18px; }
+  th,td{
+    text-align:left; padding:9px 12px;
+    border-bottom:1px solid rgba(245,243,238,.1);
+    vertical-align:top;
+  }
+  th{
+    font-size:.65rem; letter-spacing:.09em; text-transform:uppercase;
+    opacity:.45; font-weight:500;
+  }
+  td{ opacity:.8; }
+  td code{ white-space:nowrap; }
+
+  .note{
+    border-left:2px solid rgba(245,243,238,.3);
+    padding:12px 0 12px 16px;
+    margin-bottom:18px;
+    font-size:.83rem; line-height:1.7; opacity:.7;
+  }
+  .note.warn{ border-left-color:#a35c5c; }
+  .note strong{ opacity:1; }
+
+  /* The live key: masked until deliberately revealed, so it is not exposed by
+     a screen-share or a passing glance. */
+  .keyrow{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .keybox{
+    flex:1 1 320px; min-width:0;
+    background:#000; border:1px solid rgba(245,243,238,.16);
+    padding:11px 13px;
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    font-size:.78rem;
+    overflow-x:auto; white-space:nowrap;
+  }
+  .btn{
+    padding:10px 16px; cursor:pointer;
+    border:1px solid rgba(245,243,238,.3);
+    background:transparent; color:#f5f3ee;
+    font-family:'Inter',sans-serif;
+    font-size:.65rem; letter-spacing:.09em; text-transform:uppercase;
+  }
+  .btn:hover{ border-color:rgba(245,243,238,.8); background:rgba(245,243,238,.06); }
+
+  #try-output{
+    display:none;
+    background:#000; border:1px solid rgba(245,243,238,.14);
+    padding:14px 16px; margin-top:12px;
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    font-size:.75rem; line-height:1.6;
+    max-height:340px; overflow:auto; white-space:pre-wrap;
+  }
+  #try-output.show{ display:block; }
+  .ok{ color:#8fc79b; }
+  .bad{ color:#d99; }
+
+  @media (max-width:600px){
+    header{ padding:22px 24px; }
+    main{ padding:30px 24px 60px; }
+  }
+</style>
+</head>
+<body>
+
+  <header>
+    <a href="/"><img src="/assets/img/lion-rock-logo.png" alt="Lion Rock"></a>
+    <a class="back" href="/">← Back to gallery</a>
+  </header>
+
+  <div id="gate">
+    You need to be signed in to view this page.<br>
+    <a href="/manage/">Sign in →</a>
+  </div>
+
+  <main id="doc">
+    <h1>Walkthroughs API</h1>
+    <p class="lede">
+      One endpoint that returns every published walkthrough with its shareable
+      link. Built for server-to-server use — n8n, a CRM, a listings feed.
+    </p>
+
+    <h2>Endpoint</h2>
+    <pre><code id="ep-url">GET https://lionrock-walkthrough.vercel.app/api/walkthroughs</code><button class="copy" type="button">Copy</button></pre>
+    <p>Returns <code>application/json</code>. <code>GET</code> only — anything else returns <code>405</code>.</p>
+
+    <h2>Authentication</h2>
+    <p>Send the API key as <em>either</em> header — both work identically, so pick
+       whichever your tool makes easier. These are templates: replace
+       <code>YOUR_KEY</code> with the key below (or use the ready-to-run command).</p>
+    <pre><code>x-api-key: YOUR_KEY</code><button class="copy" type="button">Copy</button></pre>
+    <pre><code>Authorization: Bearer YOUR_KEY</code><button class="copy" type="button">Copy</button></pre>
+
+    <h3>Your key</h3>
+    <div class="keyrow">
+      <div class="keybox" id="keybox">••••••••••••••••••••••••••••••••</div>
+      <button class="btn" type="button" id="reveal">Reveal</button>
+      <button class="btn" type="button" id="copykey">Copy</button>
+    </div>
+    <p class="note warn" style="margin-top:14px;">
+      <strong>Treat this like a password.</strong> Anyone holding it can read
+      every walkthrough link. It lives only in the deployment's environment
+      variables — never in the site's code. To rotate it, change
+      <code>WALKTHROUGH_API_KEY</code> in Vercel and redeploy; the old key stops
+      working immediately.
+    </p>
+
+    <h3>Ready-to-run command</h3>
+    <p>Your key is already filled in below — copy and paste it straight into a terminal.</p>
+    <pre><code id="ready-curl">Click Reveal above to fill in your key.</code><button class="copy" type="button">Copy</button></pre>
+
+    <h2>Try it</h2>
+    <p>Runs a real request from this page using the key above.</p>
+    <button class="btn" type="button" id="tryit">Send test request</button>
+    <div id="try-output"></div>
+
+    <h2>Response</h2>
+    <pre><code>{
+  "count": 6,
+  "generatedAt": "2026-08-24T15:07:30.637Z",
+  "walkthroughs": [
+    {
+      "title": "Minnehaha Flats - Unit 10",
+      "address": "3710 Minnehaha Ave Minneapolis, MN 55406",
+      "slug": "minnehaha-flats-unit-10",
+      "type": "video",
+      "url": "https://lionrock-walkthrough.vercel.app/video/?property=minnehaha-flats-unit-10",
+      "path": "/video/?property=minnehaha-flats-unit-10",
+      "hasIntro": true,
+      "roomCount": 7,
+      "rooms": [
+        {
+          "label": "Living",
+          "area": "living",
+          "video": "https://…/living.mp4",
+          "reverse": "https://…/living-reverse.mp4"
+        }
+      ],
+      "createdAt": "2026-08-14T09:12:44.201Z"
+    }
+  ]
+}</code><button class="copy" type="button">Copy</button></pre>
+
+    <h3>Fields</h3>
+    <table>
+      <tr><th>Field</th><th>Meaning</th></tr>
+      <tr><td><code>title</code></td><td>Unit name as shown in the gallery.</td></tr>
+      <tr><td><code>address</code></td><td>Street address, or <code>null</code> if none was entered.</td></tr>
+      <tr><td><code>slug</code></td><td>URL-safe id. Follows the title — renaming a unit changes this, which breaks previously shared links.</td></tr>
+      <tr><td><code>type</code></td><td><code>video</code> or <code>interactive</code> — which tab it belongs to.</td></tr>
+      <tr><td><code>url</code></td><td>The full shareable link. Built from the request host, so it is correct on any deployment.</td></tr>
+      <tr><td><code>path</code></td><td>Same link without the domain, if you prefer to build your own.</td></tr>
+      <tr><td><code>hasIntro</code></td><td>Whether an intro clip plays before the first room.</td></tr>
+      <tr><td><code>roomCount</code></td><td>Number of playable rooms.</td></tr>
+      <tr><td><code>rooms[].video</code></td><td>Direct URL of the room's forward clip.</td></tr>
+      <tr><td><code>rooms[].reverse</code></td><td>Pre-rendered backwards clip, or <code>null</code> if none was uploaded.</td></tr>
+    </table>
+
+    <p class="note">
+      A property with no playable clip is left out entirely — the same rule the
+      gallery uses, so this list always matches what people can actually open.
+    </p>
+
+    <h2>Status codes</h2>
+    <table>
+      <tr><th>Code</th><th>Meaning</th></tr>
+      <tr><td><code>200</code></td><td>Success.</td></tr>
+      <tr><td><code>401</code></td><td>Missing or wrong API key.</td></tr>
+      <tr><td><code>405</code></td><td>Wrong method — only <code>GET</code> is allowed.</td></tr>
+      <tr><td><code>500</code></td><td><code>WALKTHROUGH_API_KEY</code> is not set on the deployment, or Supabase is not configured. The endpoint <em>fails closed</em>: it returns no data rather than serving it unprotected.</td></tr>
+      <tr><td><code>502</code></td><td>Supabase itself returned an error.</td></tr>
+    </table>
+
+    <h2>Examples</h2>
+
+    <h3>curl</h3>
+    <pre><code>curl -H "x-api-key: YOUR_KEY" \
+  https://lionrock-walkthrough.vercel.app/api/walkthroughs</code><button class="copy" type="button">Copy</button></pre>
+
+    <h3>n8n — HTTP Request node</h3>
+    <table>
+      <tr><th>Setting</th><th>Value</th></tr>
+      <tr><td>Method</td><td><code>GET</code></td></tr>
+      <tr><td>URL</td><td><code>https://lionrock-walkthrough.vercel.app/api/walkthroughs</code></td></tr>
+      <tr><td>Authentication</td><td><code>None</code> — the key goes in a header instead</td></tr>
+      <tr><td>Send Headers</td><td>On, "Using Fields Below"</td></tr>
+      <tr><td>Header name</td><td><code>x-api-key</code></td></tr>
+      <tr><td>Header value</td><td>your key</td></tr>
+    </table>
+    <p class="note">
+      Getting HTML back instead of JSON usually means the URL is pointing at a
+      different site. Check it ends in <code>.vercel.app</code> and includes
+      <code>/api/walkthroughs</code>.
+    </p>
+
+    <h3>JavaScript</h3>
+    <pre><code>const res = await fetch(
+  'https://lionrock-walkthrough.vercel.app/api/walkthroughs',
+  { headers: { 'x-api-key': process.env.WALKTHROUGH_API_KEY } }
+);
+const { walkthroughs } = await res.json();
+walkthroughs.forEach((w) =&gt; console.log(w.title, w.url));</code><button class="copy" type="button">Copy</button></pre>
+
+    <h2>Setup</h2>
+    <p>
+      The key is read from the deployment's environment, not from the repo. In
+      <strong>Vercel → Project Settings → Environment Variables</strong>, add
+      <code>WALKTHROUGH_API_KEY</code> (plus <code>SUPABASE_URL</code> and
+      <code>SUPABASE_ANON_KEY</code> if they are not there yet), then
+      <strong>redeploy</strong> — Vercel only reads environment variables at
+      build time, so saving alone changes nothing.
+    </p>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/supabase-config.js"></script>
+  <script src="/assets/js/admin-auth.js"></script>
+  <script src="/manage/api/docs.js"></script>
+</body>
+</html>

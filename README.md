@@ -281,6 +281,16 @@ curl -H "x-api-key: $WALKTHROUGH_API_KEY" https://your-domain/api/walkthroughs
 }
 ```
 
+#### Docs page
+
+There is a rendered version of this at **/manage/api/**, linked from the
+gallery header (the **API** button, admin-only). It is hidden unless signed
+in, and has a **Try it** button that makes a real request from the browser.
+
+The key cannot be read from server env by a browser, so that page keeps a
+copy in `localStorage` per device — you paste it once via **Reveal**. The
+real key still lives only in the deployment env vars.
+
 #### Testing it
 
 **Locally, without deploying:**
@@ -288,6 +298,11 @@ curl -H "x-api-key: $WALKTHROUGH_API_KEY" https://your-domain/api/walkthroughs
 ```bash
 npm run test:api
 ```
+
+The dev server (`scripts/dev-server.js`) routes `/api/*` to the handlers in
+`api/`, the way Vercel does in production. `npx serve` only serves files, so
+the endpoint used to 404 locally and the docs page’s **Try it** button showed
+an HTML error page.
 
 Starts the handler on a local port, checks every auth path (no key / wrong key
 / non-GET / both header styles), then prints the walkthrough list. Reads the key

@@ -12,11 +12,13 @@
 (function () {
   const uploadBtn = document.getElementById('upload-btn');
   const signOutBtn = document.getElementById('signout-btn');
+  const apiDocsBtn = document.getElementById('apidocs-btn');
   if (!window.AdminAuth) return;
 
   const apply = (user) => {
     if (uploadBtn) uploadBtn.classList.toggle('signed-in', !!user);
     if (signOutBtn) signOutBtn.classList.toggle('signed-in', !!user);
+    if (apiDocsBtn) apiDocsBtn.classList.toggle('signed-in', !!user);
 
     // Closing the modal on sign-out avoids leaving an editing surface open.
     if (!user) {
