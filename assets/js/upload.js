@@ -288,28 +288,13 @@ async function buildAreaRows() {
 
   if (!db || !selectedPropertyId) return;
 
-  // reverse_url only exists once migration 005 has run; asking for it before
-  // that 400s the whole query, so fall back to the forward-only shape.
-  let data = null;
-  const full = await db
+  const { data, error } = await db
     .from('property_videos')
-    .select('area, label, video_url, reverse_url, storage_path, reverse_path, sort_order')
+    .select('area, label, video_url, storage_path, sort_order')
     .eq('property_id', selectedPropertyId)
     .order('sort_order');
 
-  if (full.error) {
-    const basic = await db
-      .from('property_videos')
-      .select('area, label, video_url, sort_order')
-      .eq('property_id', selectedPropertyId)
-      .order('sort_order');
-    if (basic.error || !basic.data) return;
-    data = basic.data;
-  } else {
-    data = full.data;
-  }
-
-  if (!data) return;
+  if (error || !data) return;
 
   data.forEach((row) => {
     const match = areaRows.find((r) => r.area === row.area);
@@ -317,9 +302,7 @@ async function buildAreaRows() {
       match.label = row.label || match.label;   // saved rename wins
       match.existing = true;
       match.hasVideo = !!row.video_url;
-      match.hasReverse = !!row.reverse_url;
       match.storagePath = row.storage_path || null;
-      match.reversePath = row.reverse_path || null;
       match.savedSort = row.sort_order;
     } else {
       areaRows.push({
@@ -328,9 +311,7 @@ async function buildAreaRows() {
         intro: row.area === 'intro',
         existing: true,
         hasVideo: !!row.video_url,
-        hasReverse: !!row.reverse_url,
         storagePath: row.storage_path || null,
-        reversePath: row.reverse_path || null,
         savedSort: row.sort_order,
       });
     }
@@ -360,10 +341,6 @@ function orderOf(row) {
 
 function renderAreas() {
   const grid = $('#area-grid');
-  // Reversed clips are only used by the Video Walkthrough player, so the
-  // Interactive tab shows a single drop per room.
-  const wantsReverse = uploadMode() === 'video';
-
   grid.innerHTML = areaRows.map((r, i) => `
     <div class="area-slot${r.intro ? ' optional' : ''}" data-area="${escapeHtml(r.area)}" data-index="${i}"
          ${r.intro ? '' : 'draggable="true"'}>
@@ -377,15 +354,8 @@ function renderAreas() {
       <div class="area-drops">
         <label class="area-drop" data-kind="forward">
           <input type="file" accept="video/mp4,video/quicktime,video/webm" hidden>
-          ${wantsReverse ? '<span class="drop-kind">Forward</span>' : ''}
           <span class="area-hint">${r.hasVideo ? 'Uploaded' : 'Choose or drop'}</span>
         </label>
-        ${wantsReverse ? `
-        <label class="area-drop" data-kind="reverse">
-          <input type="file" accept="video/mp4,video/quicktime,video/webm" hidden>
-          <span class="drop-kind">Backward</span>
-          <span class="area-hint">${r.hasReverse ? 'Uploaded' : 'Choose or drop'}</span>
-        </label>` : ''}
       </div>
       <div class="area-progress"><div class="area-progress-fill"></div></div>
     </div>`
@@ -542,10 +512,10 @@ function wireSlot(slot) {
     wireAreaRemove(slot, row);
   }
 
-  // Each room has two drops: the forward clip and the pre-rendered reversed
-  // one. They're staged under separate keys so both can upload in one go.
+  // One drop per room. The staged key keeps its "<area>::forward" shape so a
+  // second kind could be reintroduced without reworking the staging map.
   slot.querySelectorAll('.area-drop').forEach((drop) => {
-    const kind = drop.dataset.kind;                 // 'forward' | 'reverse'
+    const kind = drop.dataset.kind || 'forward';
     const key = stageKey(area, kind);
     const input = drop.querySelector('input[type=file]');
     const hint = drop.querySelector('.area-hint');
@@ -579,7 +549,7 @@ function wireSlot(slot) {
   });
 }
 
-/* staged is keyed "<area>::<kind>" so forward and reverse don't collide. */
+/* staged is keyed "<area>::<kind>". Only "forward" is used now. */
 function stageKey(area, kind) { return `${area}::${kind}`; }
 function parseKey(key) {
   const [area, kind] = key.split('::');
@@ -658,12 +628,12 @@ async function startUpload() {
 
     const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
     // Reversed clips get their own object so they never overwrite the forward one.
-    const path = `${property.slug}/${area}${kind === 'reverse' ? '-reverse' : ''}.${ext}`;
+    const path = `${property.slug}/${area}.${ext}`;
 
     // Replacing a .mp4 with a .mov writes a DIFFERENT object, leaving the old
     // one behind — still stored, still billed, and still the one some cached
     // client might hold. Remove the previous file when the extension changes.
-    const prevPath = kind === 'reverse' ? meta.reversePath : meta.storagePath;
+    const prevPath = meta.storagePath;
     if (prevPath && prevPath !== path) {
       await db.storage.from(cfg.bucket || 'walkthrough-videos').remove([prevPath]);
     }
@@ -697,13 +667,8 @@ async function startUpload() {
       label: meta.label,
       sort_order: orderOf(meta),
     };
-    if (kind === 'reverse') {
-      record.reverse_url = publicUrl;
-      record.reverse_path = path;
-    } else {
-      record.video_url = publicUrl;
-      record.storage_path = path;
-    }
+    record.video_url = publicUrl;
+    record.storage_path = path;
 
     const { error: rowErr } = await db.from('property_videos').upsert(
       record,

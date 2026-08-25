@@ -52,6 +52,150 @@
     wireTryIt();
     paintReadyCurl();
     useRealHost();
+    wireKeyManager();
+    loadKeys();
+  }
+
+  /* ---------- key management ---------- */
+
+  /* /api/keys is protected by the admin's Supabase session, not by an API key —
+     minting keys must not be possible with a key, or a leaked one could mint
+     replacements for itself and survive revocation. */
+  async function authFetch(url, options = {}) {
+    const { data } = await window.AdminAuth.client.auth.getSession();
+    const token = data && data.session ? data.session.access_token : null;
+    if (!token) throw new Error('Not signed in.');
+
+    return fetch(url, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...(options.headers || {}),
+      },
+    });
+  }
+
+  function wireKeyManager() {
+    const btn = $('#newkey-create');
+    if (!btn) return;
+
+    btn.addEventListener('click', async () => {
+      const name = ($('#newkey-name').value || '').trim();
+      const expires = $('#newkey-expiry').value;
+      const out = $('#newkey-output');
+
+      if (!name) {
+        out.innerHTML = '<p class="note warn">Give the key a name first — it\'s how you\'ll recognise it later.</p>';
+        return;
+      }
+
+      btn.disabled = true;
+      out.innerHTML = '<p class="note">Generating…</p>';
+
+      try {
+        const res = await authFetch('/api/keys', {
+          method: 'POST',
+          body: JSON.stringify({ name, expires }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          out.innerHTML = `<p class="note warn"><strong>${escapeHtml(data.error || 'Failed')}</strong><br>${escapeHtml(data.detail || '')}</p>`;
+          return;
+        }
+
+        // Shown once — there is no way to retrieve it afterwards.
+        out.innerHTML =
+          '<div class="newkey">' +
+          `<strong>${escapeHtml(data.name)}</strong> — ${escapeHtml(data.expiresLabel)}` +
+          `<code class="plain" id="newkey-plain">${escapeHtml(data.key)}</code>` +
+          '<span class="warnline">Copy this now — it cannot be shown again.</span> ' +
+          '<button class="btn" type="button" id="newkey-copy" style="margin-left:8px;">Copy</button> ' +
+          '<button class="btn" type="button" id="newkey-use">Use on this device</button>' +
+          '</div>';
+
+        $('#newkey-copy').addEventListener('click', (e) => copy(data.key, e.target));
+        $('#newkey-use').addEventListener('click', (e) => {
+          storeKey(data.key);
+          flash(e.target, 'Saved');
+          wireKeyBox();      // repaint the masked box with the new key
+        });
+
+        $('#newkey-name').value = '';
+        loadKeys();
+      } catch (err) {
+        out.innerHTML = `<p class="note warn">${escapeHtml(String(err && err.message))}</p>`;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+
+  async function loadKeys() {
+    const list = $('#keys-list');
+    if (!list) return;
+
+    try {
+      const res = await authFetch('/api/keys');
+      const data = await res.json();
+
+      if (!res.ok) {
+        list.innerHTML = `<p class="note warn"><strong>${escapeHtml(data.error || 'Failed')}</strong><br>${escapeHtml(data.detail || '')}</p>`;
+        return;
+      }
+
+      if (!data.keys.length) {
+        list.innerHTML = '<p class="note">No keys yet. Generate one above.</p>';
+        return;
+      }
+
+      const rows = data.keys.map((k) => {
+        const expiry = k.expires_at
+          ? new Date(k.expires_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+          : 'Never';
+        const used = k.last_used_at
+          ? new Date(k.last_used_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+          : '—';
+        const canRevoke = k.status === 'active';
+
+        return '<tr>' +
+          `<td>${escapeHtml(k.name)}</td>` +
+          `<td><code>${escapeHtml(k.key_prefix)}…</code></td>` +
+          `<td><span class="badge ${k.status}">${k.status}</span></td>` +
+          `<td>${escapeHtml(expiry)}</td>` +
+          `<td>${escapeHtml(used)}</td>` +
+          `<td>${canRevoke ? `<button class="revoke" data-id="${k.id}" data-name="${escapeHtml(k.name)}">Revoke</button>` : ''}</td>` +
+          '</tr>';
+      }).join('');
+
+      list.innerHTML =
+        '<table class="keys-table">' +
+        '<tr><th>Name</th><th>Key</th><th>Status</th><th>Expires</th><th>Last used</th><th></th></tr>' +
+        rows + '</table>';
+
+      list.querySelectorAll('.revoke').forEach((btn) => {
+        btn.addEventListener('click', () => revokeKey(btn.dataset.id, btn.dataset.name));
+      });
+    } catch (err) {
+      list.innerHTML = `<p class="note warn">${escapeHtml(String(err && err.message))}</p>`;
+    }
+  }
+
+  async function revokeKey(id, name) {
+    if (!window.confirm(`Revoke "${name}"?\n\nAnything using this key stops working immediately.`)) return;
+
+    try {
+      const res = await authFetch(`/api/keys?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) {
+        window.alert(`${data.error || 'Failed'}\n${data.detail || ''}`);
+        return;
+      }
+      loadKeys();
+    } catch (err) {
+      window.alert(String(err && err.message));
+    }
   }
 
   /* The docs are written against the production domain, but if you're reading

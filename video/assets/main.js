@@ -313,37 +313,24 @@
 
   /* ---------- navigation ---------- */
 
-  /* Click a room and that room plays. Going BACKWARD first plays the current
-     room's pre-rendered reversed clip — walking back out of where you are —
-     then the target's forward clip. Forward is just the target's clip.
-
-     The reversed clip exists because no browser can play a <video> backwards.
-     A room with no reverse uploaded falls back to forward-only, so navigation
-     still works, just without the walking-backwards effect. */
+  /* Click a room and that room plays, start to finish. Same in both
+     directions: going back is simply the target room's clip, no reversed
+     footage in between. */
   async function goToRoom(target) {
     if (!rooms[target] || target === activeIndex) return;
 
     // A newer click supersedes the clip in flight. It can't be aborted
     // mid-await, so playClip watches this token and resolves if it's replaced.
-    const myWalk = walkToken += 1;
+    walkToken += 1;
 
     // Stop whatever is mid-play, so the interrupted clip doesn't keep running
     // (and firing 'ended') underneath the new one.
     slots.forEach((s) => { if (!s.el.paused) s.el.pause(); });
 
-    const goingBack = target < activeIndex;
-    const leaving = rooms[activeIndex];
-
     // The nav answers the click straight away - before the clip loads - so it
     // always shows what you actually clicked.
     activeIndex = target;
     highlight(target);
-
-    if (goingBack && leaving && leaving.reverse) {
-      // Walk back out of the room being left, buffering the target meanwhile.
-      await playClip(leaving.reverse, rooms[target].video);
-      if (myWalk !== walkToken) return;   // superseded mid-reverse
-    }
 
     // Buffer the following room so a forward gesture from here starts instantly.
     const after = rooms[target + 1];
@@ -440,13 +427,7 @@
    * network again. With storage consent they're also written to Cache Storage,
    * making the next visit instant. */
   async function preload() {
-    // Reversed clips are preloaded too, so the first backward move doesn't
-    // stall waiting on a cold network.
-    const urls = [
-      introVideo,
-      ...rooms.map((r) => r.video),
-      ...rooms.map((r) => r.reverse),
-    ].filter(Boolean);
+    const urls = [introVideo, ...rooms.map((r) => r.video)].filter(Boolean);
     if (!urls.length) return;
 
     // Drop any cached copy of these clips that isn't the current version, so a

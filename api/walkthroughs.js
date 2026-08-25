@@ -1,12 +1,12 @@
 /* GET /api/walkthroughs — every published walkthrough, with its shareable link.
  *
- * Secured with a shared API key. Send it as either:
- *   Authorization: Bearer <WALKTHROUGH_API_KEY>
- *   x-api-key: <WALKTHROUGH_API_KEY>
+ * Secured with an API key generated from /manage/api/. Send it as either:
+ *   Authorization: Bearer <key>
+ *   x-api-key: <key>
  *
- * Set WALKTHROUGH_API_KEY in Vercel → Project Settings → Environment Variables.
- * Without it set, the endpoint refuses every request rather than defaulting to
- * open — a missing secret must never mean "no security".
+ * The api_keys table is the ONLY source of truth. A key works if a matching row
+ * exists, isn't revoked, and hasn't expired — nothing else is accepted, so
+ * revoking a row kills that key immediately.
  *
  * Runs server-side, so it can use the service-role key if one is configured.
  * It falls back to the anon key, which is enough because reads are public.
@@ -15,17 +15,6 @@
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
-const API_KEY = process.env.WALKTHROUGH_API_KEY;
-
-/* Constant-time compare so a wrong key can't be guessed byte-by-byte from
-   response timing. */
-function safeEqual(a, b) {
-  if (typeof a !== 'string' || typeof b !== 'string') return false;
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
 
 /* Query-string params. `req.query` exists on Vercel but not on a bare Node
    server, so parse the URL instead — the same code then works in both. */
@@ -44,6 +33,79 @@ function truthy(v) {
   return !['false', '0', 'no', 'off'].includes(String(v).toLowerCase());
 }
 
+/* The database is the only source of truth: a key is valid only if a matching
+ * row exists in api_keys, isn't revoked, and hasn't expired. Revoking a row in
+ * the table therefore kills the key immediately — there is no env-var bypass.
+ *
+ * Keys are matched by SHA-256 hash. The plaintext is never stored, so a leaked
+ * database still can't be used to call the API. */
+async function authorize(presented) {
+  const hash = require('crypto').createHash('sha256').update(presented).digest('hex');
+
+  let rows;
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/api_keys?select=id,name,expires_at,revoked_at&key_hash=eq.${hash}`,
+      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+    );
+
+    if (!r.ok) {
+      const detail = await r.text();
+      // A missing table is a deployment mistake, not a caller mistake — say so
+      // rather than returning a misleading 401.
+      return {
+        ok: false,
+        status: 500,
+        body: {
+          error: 'Key store unavailable',
+          detail: /api_keys/.test(detail)
+            ? 'Run supabase/migrations/007-api-keys.sql, then generate a key at /manage/api/.'
+            : detail.slice(0, 200),
+        },
+      };
+    }
+    rows = await r.json();
+  } catch (err) {
+    return {
+      ok: false,
+      status: 500,
+      body: { error: 'Key store unreachable', detail: String(err && err.message) },
+    };
+  }
+
+  const record = Array.isArray(rows) ? rows[0] : null;
+
+  // Not in the database at all — not a valid key, whatever it is.
+  if (!record) {
+    return { ok: false, status: 401, body: { error: 'Unauthorized', detail: 'Unknown API key.' } };
+  }
+
+  if (record.revoked_at) {
+    return { ok: false, status: 401, body: { error: 'Unauthorized', detail: 'This key was revoked.' } };
+  }
+
+  if (record.expires_at && new Date(record.expires_at) <= new Date()) {
+    return {
+      ok: false,
+      status: 401,
+      body: { error: 'Unauthorized', detail: `This key expired on ${record.expires_at}.` },
+    };
+  }
+
+  // Best-effort usage stamp — never let it block or fail the response.
+  fetch(`${SUPABASE_URL}/rest/v1/api_keys?id=eq.${record.id}`, {
+    method: 'PATCH',
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ last_used_at: new Date().toISOString() }),
+  }).catch(() => {});
+
+  return { ok: true, name: record.name };
+}
+
 function presentedKey(req) {
   const auth = req.headers.authorization || '';
   if (auth.toLowerCase().startsWith('bearer ')) return auth.slice(7).trim();
@@ -59,18 +121,6 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  if (!API_KEY) {
-    // Fail closed: never serve data because a secret wasn't configured.
-    return res.status(500).json({
-      error: 'API key not configured',
-      detail: 'Set WALKTHROUGH_API_KEY in the deployment environment.',
-    });
-  }
-
-  if (!safeEqual(presentedKey(req), API_KEY)) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     return res.status(500).json({
       error: 'Supabase not configured',
@@ -78,10 +128,22 @@ module.exports = async (req, res) => {
     });
   }
 
+  const presented = presentedKey(req);
+  if (!presented) {
+    return res.status(401).json({ error: 'Unauthorized', detail: 'No API key provided.' });
+  }
+
+  const auth = await authorize(presented);
+  if (!auth.ok) {
+    // Fail closed: a missing env key must never mean "no security".
+    if (auth.status === 500) return res.status(500).json(auth.body);
+    return res.status(401).json(auth.body);
+  }
+
   try {
     const select =
       'slug,title,address,mode,created_at,' +
-      'property_videos(area,label,video_url,reverse_url,sort_order)';
+      'property_videos(area,label,video_url,sort_order)';
 
     const upstream = await fetch(
       `${SUPABASE_URL}/rest/v1/properties?select=${encodeURIComponent(select)}&order=created_at`,
@@ -128,7 +190,6 @@ module.exports = async (req, res) => {
             label: r.label,
             area: r.area,
             video: r.video_url,
-            reverse: r.reverse_url || null, // pre-rendered backwards clip
           })),
           createdAt: p.created_at,
         };

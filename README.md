@@ -273,7 +273,7 @@ curl -H "x-api-key: $WALKTHROUGH_API_KEY" https://your-domain/api/walkthroughs
       "hasIntro": true,
       "roomCount": 7,
       "rooms": [
-        { "label": "Living", "area": "living", "video": "https://…/living.mp4", "reverse": "https://…/living-reverse.mp4" }
+        { "label": "Living", "area": "living", "video": "https://…/living.mp4" }
       ],
       "createdAt": "2026-08-14T…"
     }
@@ -541,9 +541,8 @@ re-fetches rather than re-pointing the existing cards.
 
 **Upload/Edit follows the selected tab.** The modal shows only that tab's
 properties, creates new ones in it, and displays the tab name as a badge in its
-header so there's no doubt which list you're editing. The Interactive tab shows
-one drop per room; only Video shows the Forward/Backward pair, since reversed
-clips are useless to the scrub player.
+header so there's no doubt which list you're editing. Both tabs show one
+drop per room.
 
 Existing properties were assigned to `interactive` by the migration — that's
 where they were built — so the Video tab starts empty until you add to it.
@@ -552,8 +551,8 @@ where they were built — so the Video tab starts empty until you add to it.
 |---|---|---|
 | Input | Click, scroll, swipe, or arrow keys | Scroll / swipe to scrub |
 | Motion | Plays whole clips end to end | Frame-accurate scrubbing |
-| Backwards | Plays a pre-rendered **reversed** clip | Seeks frame by frame (choppier) |
-| Needs | Forward **and** reversed clips | Forward clips only |
+| Backwards | Plays the target room's clip | Seeks frame by frame (choppier) |
+| Needs | One clip per room | One clip per room |
 
 The chosen tab is remembered in `localStorage`
 (`lionrock-walkthrough-mode`), so it survives a reload and a trip into a
@@ -561,18 +560,14 @@ walkthrough and back.
 
 #### How the Video Walkthrough moves
 
-No browser can play a `<video>` backwards, which is what makes reverse
-scrubbing the weak point of the Interactive tab. The Video tab sidesteps it by
-playing a **pre-rendered reversed copy forwards**:
+Click a room and that room's clip plays, start to finish, then holds on its
+last frame. The same in both directions: going back is simply the target
+room's clip.
 
-- **Click a later room** → play that room's forward clip. *(1 clip per room
-  stepped through.)*
-- **Click an earlier room** → play the **current** room's reversed clip
-  (walking back out), **then** the target's forward clip (walking in).
-  *(2 clips.)* Both are needed — playing only the reverse leaves the viewer
-  looking at the room they just left.
-- Skipping several rooms chains the same rule, so the path stays continuous
-  rather than cutting.
+There used to be a second, pre-rendered **reversed** clip per room, played when
+moving to an earlier room so it looked like walking back out. That's been
+removed — it doubled the upload work and the download size for an effect that
+only applied to backward moves. One clip per room now.
 
 **The tour plays itself, once.** Opening a property plays the intro (if one is
 uploaded) and then every room back-to-back, and **stops on the last room**,
@@ -597,9 +592,8 @@ like clicking the header nav.
 
 Clips are swapped instantly, with no crossfade, and only once the incoming clip
 has painted its first frame (`requestVideoFrameCallback`). An earlier 0.25s fade
-meant each clip began playing while still transparent — on a 3s reverse clip
-that swallowed a visible chunk of it, which read as "the reverse never played"
-even though it had.
+meant each clip began playing while still transparent, swallowing a visible
+chunk of it.
 
 The nav stays clickable while a clip is playing — a new click **takes over**
 from the walk in progress, starting from whichever room has actually been
@@ -611,8 +605,6 @@ running loop checks after every clip, bailing out if it's been superseded. The
 in-flight clip is paused, and `playClip` resolves on that pause rather than
 waiting for an `ended` event that will never fire — otherwise the old walk
 would hang and keep advancing behind the new one.
-A room with no reversed clip still works — it falls back to the target's
-forward clip, just without the walking-backwards effect.
 
 #### Preloading
 
@@ -659,13 +651,11 @@ requests** once loaded — verified. With storage consent granted, they're also
 written to Cache Storage, and a later visit reads from there instead of
 re-downloading.
 
-Upload both clips per room from the **Forward** / **Backward** drops in the
-upload modal. Reversed files are stored as `<area>-reverse.<ext>` so they never
-overwrite the forward one.
+Upload one clip per room from the drop in the upload modal.
 
-**Requires `supabase/migrations/005-reverse-videos.sql`** (adds `reverse_url` /
-`reverse_path`). Until it's run, both pages fall back to forward-only rather
-than erroring, and the Backward slots won't save.
+The `reverse_url` / `reverse_path` columns from migration 005 are left in place
+but no longer read or written — dropping columns is destructive, and any
+reversed files already uploaded are simply ignored.
 
 ### First-visit guides
 

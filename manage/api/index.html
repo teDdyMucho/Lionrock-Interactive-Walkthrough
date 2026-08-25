@@ -145,6 +145,54 @@
   }
   .btn:hover{ border-color:rgba(245,243,238,.8); background:rgba(245,243,238,.06); }
 
+  /* Key management */
+  select.btn{
+    background:#000;
+    -webkit-appearance:none; appearance:none;
+    padding-right:30px;
+    background-image:linear-gradient(45deg,transparent 50%,#f5f3ee 50%),linear-gradient(135deg,#f5f3ee 50%,transparent 50%);
+    background-position:calc(100% - 16px) 50%, calc(100% - 11px) 50%;
+    background-size:5px 5px, 5px 5px;
+    background-repeat:no-repeat;
+  }
+  select.btn option{ background:#0c0c0c; color:#f5f3ee; }
+
+  /* A newly minted key: shown once, so it needs to be unmissable. */
+  .newkey{
+    border:1px solid #5f8f6a;
+    background:rgba(95,143,106,.07);
+    padding:16px 18px;
+    margin-bottom:18px;
+  }
+  .newkey .plain{
+    display:block;
+    background:#000; border:1px solid rgba(245,243,238,.2);
+    padding:12px 14px; margin:10px 0;
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    font-size:.78rem; word-break:break-all;
+  }
+  .newkey .warnline{ color:#8fc79b; font-size:.78rem; }
+
+  .keys-table td{ vertical-align:middle; }
+  .badge{
+    display:inline-block;
+    padding:3px 8px;
+    font-size:.6rem; letter-spacing:.08em; text-transform:uppercase;
+    border:1px solid rgba(245,243,238,.25);
+  }
+  .badge.active{ color:#8fc79b; border-color:#5f8f6a; }
+  .badge.expired{ color:#c8a06a; border-color:#8a6f4a; }
+  .badge.revoked{ color:#d99; border-color:#a35c5c; }
+
+  .revoke{
+    background:none; border:1px solid rgba(245,243,238,.2);
+    color:#f5f3ee; cursor:pointer;
+    font-family:'Inter',sans-serif;
+    font-size:.6rem; letter-spacing:.08em; text-transform:uppercase;
+    padding:5px 9px; opacity:.6;
+  }
+  .revoke:hover{ opacity:1; border-color:#a35c5c; color:#d99; }
+
   #try-output{
     display:none;
     background:#000; border:1px solid rgba(245,243,238,.14);
@@ -193,19 +241,52 @@
     <pre><code>x-api-key: YOUR_KEY</code><button class="copy" type="button">Copy</button></pre>
     <pre><code>Authorization: Bearer YOUR_KEY</code><button class="copy" type="button">Copy</button></pre>
 
-    <h3>Your key</h3>
+    <h2 id="keys">API keys</h2>
+    <p>
+      Generate a key for each consumer, with an expiry to suit. Keys are stored
+      as a hash — the plaintext is shown once, at creation, and can never be
+      retrieved again. Revoking one takes effect immediately and doesn't affect
+      the others.
+    </p>
+
+    <h3>Generate a key</h3>
+    <div class="keyrow" style="margin-bottom:14px;">
+      <div class="keybox" style="flex:1 1 260px; padding:0;">
+        <input type="text" id="newkey-name" placeholder="What is this key for? e.g. n8n workflow"
+               style="width:100%; background:transparent; border:none; color:#f5f3ee;
+                      font-family:'Inter',sans-serif; font-size:.82rem;
+                      padding:11px 13px; outline:none;">
+      </div>
+      <select id="newkey-expiry" class="btn" style="cursor:pointer;">
+        <option value="1w">1 week</option>
+        <option value="1m">1 month</option>
+        <option value="1y">1 year</option>
+        <option value="never" selected>Unlimited</option>
+      </select>
+      <button class="btn" type="button" id="newkey-create">Generate</button>
+    </div>
+    <div id="newkey-output"></div>
+
+    <h3>Existing keys</h3>
+    <div id="keys-list"><p class="note">Loading…</p></div>
+
+    <p class="note warn">
+      <strong>Treat a key like a password.</strong> Anyone holding one can read
+      every walkthrough link. Only the hash is stored, so a leaked database
+      still can't call the API — but a leaked <em>key</em> can, until you revoke
+      it here.
+    </p>
+
+    <h3>Your key on this device</h3>
+    <p>
+      Used by the <strong>Try it</strong> button and the ready-to-run command
+      below. Saved in this browser only.
+    </p>
     <div class="keyrow">
       <div class="keybox" id="keybox">••••••••••••••••••••••••••••••••</div>
       <button class="btn" type="button" id="reveal">Reveal</button>
       <button class="btn" type="button" id="copykey">Copy</button>
     </div>
-    <p class="note warn" style="margin-top:14px;">
-      <strong>Treat this like a password.</strong> Anyone holding it can read
-      every walkthrough link. It lives only in the deployment's environment
-      variables — never in the site's code. To rotate it, change
-      <code>WALKTHROUGH_API_KEY</code> in Vercel and redeploy; the old key stops
-      working immediately.
-    </p>
 
     <h3>Ready-to-run command</h3>
     <p>Your key is already filled in below — copy and paste it straight into a terminal.</p>
@@ -307,8 +388,7 @@
         {
           "label": "Living",
           "area": "living",
-          "video": "https://…/living.mp4",
-          "reverse": "https://…/living-reverse.mp4"
+          "video": "https://…/living.mp4"
         }
       ],
       "createdAt": "2026-08-14T09:12:44.201Z"
@@ -328,7 +408,6 @@
       <tr><td><code>hasIntro</code></td><td>Whether an intro clip plays before the first room.</td></tr>
       <tr><td><code>roomCount</code></td><td>Number of playable rooms.</td></tr>
       <tr><td><code>rooms[].video</code></td><td>Direct URL of the room's forward clip.</td></tr>
-      <tr><td><code>rooms[].reverse</code></td><td>Pre-rendered backwards clip, or <code>null</code> if none was uploaded.</td></tr>
     </table>
 
     <p class="note">
@@ -378,12 +457,21 @@ walkthroughs.forEach((w) =&gt; console.log(w.title, w.url));</code><button class
 
     <h2>Setup</h2>
     <p>
-      The key is read from the deployment's environment, not from the repo. In
-      <strong>Vercel → Project Settings → Environment Variables</strong>, add
-      <code>WALKTHROUGH_API_KEY</code> (plus <code>SUPABASE_URL</code> and
-      <code>SUPABASE_ANON_KEY</code> if they are not there yet), then
-      <strong>redeploy</strong> — Vercel only reads environment variables at
-      build time, so saving alone changes nothing.
+      Keys live in the <code>api_keys</code> table, so
+      <strong>supabase/migrations/007-api-keys.sql</strong> must be run once in the
+      Supabase SQL editor. Until then this page can’t list or generate keys, and
+      the endpoint returns <code>500</code> rather than serving data unprotected.
+    </p>
+    <p>
+      <code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code> must also be set in
+      <strong>Vercel → Project Settings → Environment Variables</strong>, then
+      <strong>redeploy</strong> — Vercel only reads environment variables at build
+      time, so saving alone changes nothing.
+    </p>
+    <p class="note">
+      There is no longer a <code>WALKTHROUGH_API_KEY</code> environment variable. The
+      database is the only source of truth: a key works only while its row exists,
+      is unrevoked, and is unexpired.
     </p>
   </main>
 

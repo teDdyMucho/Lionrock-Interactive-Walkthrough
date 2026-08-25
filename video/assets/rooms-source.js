@@ -34,7 +34,7 @@ async function loadVideoRooms() {
 
   const { data: rows, error: vErr } = await db
     .from('property_videos')
-    .select('area, label, video_url, reverse_url, sort_order')
+    .select('area, label, video_url, sort_order')
     .eq('property_id', property.id)
     .order('sort_order');
 
@@ -63,12 +63,9 @@ async function loadVideoRooms() {
     // The intro is not a room: it plays once on arrival and gets no nav entry
     // or dot. Passed separately so the player can show it before room 1.
     introVideo: intro ? intro.video_url : null,
-    // `reverse` is the pre-rendered backwards clip, played when the viewer
-    // moves to an EARLIER room — no browser can play a <video> backwards.
     rooms: usable.map((r) => ({
       label: r.label,
       video: r.video_url,
-      reverse: r.reverse_url || null,
     })),
   };
 }
