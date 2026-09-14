@@ -531,6 +531,8 @@
   #video-drop.done{ border-color:#5f8f6a; }
   #video-drop.error{ border-color:#a35c5c; }
   #video-drop .area-hint{ font-size:.78rem; }
+  .drop-limit{ font-size:.68rem; opacity:.35; }
+  #video-drop.error .drop-limit{ opacity:.5; }
 
   /* The existing videos, listed under the form so they can be managed */
   .video-list{ margin:26px 0 4px; }
@@ -772,6 +774,7 @@
       <div id="video-drop">
         <input type="file" accept="video/*" hidden>
         <span class="area-hint">Drop a video here, or click to choose</span>
+        <span class="drop-limit" id="video-limit"></span>
       </div>
 
       <div class="upload-actions">

@@ -684,6 +684,22 @@ serverless function reads the real address off the request headers
 (`x-forwarded-for`). On Vercel it also picks up the city/region/country headers;
 elsewhere those columns stay null, which the table renders as `—`.
 
+**Upload size limit.** The modal states the limit before a file is picked, and
+an oversized file is rejected in the browser — no waiting through a long upload
+only to be turned away. The default is 50 MB; change it with
+`SUPABASE_MAX_UPLOAD_MB` in `.env` (then `npm run config`).
+
+Raising that number alone is not enough. Supabase enforces a **project-wide
+per-file cap that overrides the bucket setting** — 50 MB on the free plan. To
+actually accept larger files:
+
+1. Raise the project cap under **Settings → Storage** in the Supabase dashboard.
+2. Set the bucket's `file_size_limit` to match (`supabase/schema.sql` asks for
+   500 MB, but the project cap wins).
+3. Set `SUPABASE_MAX_UPLOAD_MB` to the same number so the browser check agrees.
+
+If the numbers disagree, the smallest one is what actually applies.
+
 The share token is 12 random URL-safe characters, so links can't be found by
 guessing sequential ids.
 

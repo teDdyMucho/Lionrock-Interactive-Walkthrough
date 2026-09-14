@@ -17,4 +17,7 @@ window.SUPABASE_CONFIG = {
   url: 'https://YOUR-PROJECT-REF.supabase.co',
   anonKey: 'YOUR-ANON-PUBLIC-KEY',
   bucket: 'walkthrough-videos',
+  // Largest video the Videos tab accepts, in MB. Supabase enforces a
+  // project-wide cap that overrides the bucket setting (50MB on the free plan).
+  maxUploadMb: 50,
 };

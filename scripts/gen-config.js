@@ -52,6 +52,12 @@ const url = process.env.SUPABASE_URL || env.SUPABASE_URL;
 const anonKey = process.env.SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY;
 const bucket = process.env.SUPABASE_BUCKET || env.SUPABASE_BUCKET || 'walkthrough-videos';
 
+// Largest file the Videos tab will accept, in MB. Must match the bucket's
+// file_size_limit AND stay under the project-wide cap (Settings → Storage),
+// which is 50MB on the free plan and overrides the bucket setting.
+const maxUploadMb =
+  Number(process.env.SUPABASE_MAX_UPLOAD_MB || env.SUPABASE_MAX_UPLOAD_MB) || 50;
+
 const missing = [];
 if (!url) missing.push('SUPABASE_URL');
 if (!anonKey) missing.push('SUPABASE_ANON_KEY');
@@ -92,10 +98,11 @@ const banner =
 fs.mkdirSync(path.dirname(outPath), { recursive: true });
 fs.writeFileSync(
   outPath,
-  `${banner}window.SUPABASE_CONFIG = ${JSON.stringify({ url, anonKey, bucket }, null, 2)};\n`
+  `${banner}window.SUPABASE_CONFIG = ${JSON.stringify({ url, anonKey, bucket, maxUploadMb }, null, 2)};\n`
 );
 
 const host = url.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
 console.log(`\n✓ Wrote assets/js/supabase-config.js`);
 console.log(`  project: ${host}`);
-console.log(`  bucket:  ${bucket}\n`);
+console.log(`  bucket:  ${bucket}`);
+console.log(`  max upload: ${maxUploadMb} MB\n`);

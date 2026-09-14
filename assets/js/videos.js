@@ -24,7 +24,19 @@
   const BUCKET = cfg.bucket || 'walkthrough-videos';
 
   let staged = null;        // the File waiting to be uploaded
+  let rejectedSize = 0;     // size of the last file turned away for being too big
   let signedIn = false;
+
+  /* Largest file Storage will accept. Checked here as well as server-side so an
+     oversized file is rejected instantly, rather than after uploading for a few
+     minutes only to be turned away.
+
+     This has to match the bucket's file_size_limit. Note that a Supabase
+     project also has a global per-file cap that overrides the bucket setting
+     (50MB on the free plan), so raising this alone isn't enough — raise the
+     project limit under Settings → Storage first. */
+  const MAX_UPLOAD_MB = Number(cfg.maxUploadMb) || 50;
+  const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 
   /* ---------- gallery ---------- */
 
@@ -242,6 +254,7 @@
 
   function resetForm() {
     staged = null;
+    rejectedSize = 0;
     ['#video-title', '#video-address', '#video-description'].forEach((s) => {
       const el = $(s);
       if (el) el.value = '';
@@ -249,6 +262,8 @@
     if (drop) {
       drop.classList.remove('staged', 'done', 'error', 'dragging');
       drop.querySelector('.area-hint').textContent = 'Drop a video here, or click to choose';
+      const limit = drop.querySelector('.drop-limit');
+      if (limit) limit.textContent = `MP4, MOV or WebM · up to ${MAX_UPLOAD_MB} MB`;
     }
     setStatus('');
   }
@@ -261,6 +276,10 @@
   }
 
   if (drop) {
+    // Paint the limit immediately, not just when the modal is next reset.
+    const limitEl = drop.querySelector('.drop-limit');
+    if (limitEl) limitEl.textContent = `MP4, MOV or WebM · up to ${MAX_UPLOAD_MB} MB`;
+
     drop.addEventListener('click', () => fileInput && fileInput.click());
     if (fileInput) {
       fileInput.addEventListener('change', () => {
@@ -281,15 +300,36 @@
 
   function stageFile(file) {
     if (!file.type.startsWith('video/')) {
+      rejectedSize = 0;   // this one was refused for its type, not its size
       setStatus('That file isn\'t a video.', true);
       return;
     }
+
+    if (file.size > MAX_UPLOAD_BYTES) {
+      staged = null;
+      rejectedSize = file.size;
+      drop.classList.remove('staged', 'done');
+      drop.classList.add('error');
+      drop.querySelector('.area-hint').textContent =
+        `${file.name} · ${mb(file.size)} MB — too large`;
+      setStatus(
+        `That video is ${mb(file.size)} MB. The limit is ${MAX_UPLOAD_MB} MB — ` +
+        'compress it or trim it down, then try again.',
+        true
+      );
+      return;
+    }
+
     staged = file;
+    rejectedSize = 0;
     drop.classList.remove('error', 'done');
     drop.classList.add('staged');
-    drop.querySelector('.area-hint').textContent =
-      `${file.name} · ${(file.size / 1048576).toFixed(1)} MB`;
+    drop.querySelector('.area-hint').textContent = `${file.name} · ${mb(file.size)} MB`;
     setStatus('');
+  }
+
+  function mb(bytes) {
+    return (bytes / 1048576).toFixed(1);
   }
 
   const saveBtn = $('#video-save');
@@ -300,7 +340,17 @@
 
     const title = ($('#video-title').value || '').trim();
     if (!title) return setStatus('Give the video a title.', true);
-    if (!staged) return setStatus('Choose a video file first.', true);
+    if (!staged) {
+      // Don't replace the size explanation with a vaguer message — the file was
+      // chosen, it was just too big.
+      return setStatus(
+        rejectedSize
+          ? `That video is ${mb(rejectedSize)} MB, over the ${MAX_UPLOAD_MB} MB limit. ` +
+            'Choose a smaller file.'
+          : 'Choose a video file first.',
+        true
+      );
+    }
 
     saveBtn.disabled = true;
     setStatus('Uploading…');
@@ -315,7 +365,17 @@
 
     if (upErr) {
       saveBtn.disabled = false;
-      return setStatus(`Upload failed: ${upErr.message}`, true);
+      // Storage's own wording for an oversized file doesn't say what the limit
+      // is or what to do about it, so say both.
+      const tooBig = /exceeded the maximum allowed size|payload too large/i
+        .test(upErr.message || '');
+      return setStatus(
+        tooBig
+          ? `That video is ${mb(staged.size)} MB, over the ${MAX_UPLOAD_MB} MB limit. ` +
+            'Compress it or trim it down, then try again.'
+          : `Upload failed: ${upErr.message}`,
+        true
+      );
     }
 
     const { data: pub } = db.storage.from(BUCKET).getPublicUrl(path);
