@@ -547,6 +547,11 @@
     border:1px solid rgba(245,243,238,.14);
     margin-bottom:8px;
   }
+  /* The row whose details are loaded in the form above */
+  .video-row.editing{
+    border-color:rgba(245,243,238,.55);
+    background:rgba(245,243,238,.05);
+  }
   .video-row-main{ flex:1 1 auto; min-width:0; }
   .video-row-title{ font-family:'Playfair Display',serif; font-size:.98rem; }
   .video-row-sub{ font-size:.72rem; opacity:.5; margin-top:3px; }
@@ -602,8 +607,24 @@
     max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
     opacity:.45; font-size:.72rem;
   }
-  .stat-scroll{ max-height:340px; overflow-y:auto; }
   .stat-empty{ font-size:.8rem; opacity:.5; padding:6px 0 2px; }
+
+  /* Prev / "8–14 of 31" / Next, under a table that needs more than one page */
+  .page-nav{
+    display:flex; align-items:center; gap:12px;
+    margin-top:14px;
+  }
+  .page-nav .mini-btn:disabled{
+    opacity:.25; cursor:not-allowed;
+    border-color:rgba(245,243,238,.12);
+  }
+  .page-nav .mini-btn:disabled:hover{
+    background:transparent; border-color:rgba(245,243,238,.12);
+  }
+  .page-label{
+    font-size:.68rem; letter-spacing:.06em;
+    opacity:.45;
+  }
 
   /* Phones are viewer-only — uploading/editing needs a real file picker and
      room for the slot grid, so the control is desktop-only (same convention as
@@ -779,6 +800,7 @@
 
       <div class="upload-actions">
         <button class="btn btn-primary" id="video-save">Upload</button>
+        <button class="btn" id="video-cancel" hidden>Cancel</button>
         <span id="video-status"></span>
       </div>
 

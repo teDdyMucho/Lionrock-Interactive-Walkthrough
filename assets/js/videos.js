@@ -25,6 +25,7 @@
 
   let staged = null;        // the File waiting to be uploaded
   let rejectedSize = 0;     // size of the last file turned away for being too big
+  let editing = null;       // the video being edited, or null when adding a new one
   let signedIn = false;
 
   /* Renders can overlap: gallery.js calls one on load, and the auth check calls
@@ -256,17 +257,74 @@
 
   const modal = $('#video-modal');
   const drop = $('#video-drop');
+  const saveBtn = $('#video-save');
   const fileInput = drop && drop.querySelector('input[type=file]');
 
   function openModal() {
     if (!modal) return;
     modal.classList.add('open');
+    editing = null;          // always opens on the "add new" form
     resetForm();
+    paintMode();
     listVideos();
   }
 
   function closeModal() {
     if (modal) modal.classList.remove('open');
+  }
+
+  /* Loads an existing video into the form. The file becomes optional here —
+     leaving it empty keeps the current video and saves only the details. */
+  function startEdit(video) {
+    editing = video;
+    staged = null;
+    rejectedSize = 0;
+
+    $('#video-title').value = video.title || '';
+    $('#video-address').value = video.address || '';
+    $('#video-description').value = video.description || '';
+
+    if (drop) {
+      drop.classList.remove('staged', 'done', 'error', 'dragging');
+      drop.querySelector('.area-hint').textContent = 'Drop a new video to replace it';
+      const limit = drop.querySelector('.drop-limit');
+      if (limit) limit.textContent = `Optional · up to ${MAX_UPLOAD_MB} MB`;
+    }
+
+    paintMode();
+    listVideos();          // repaint so the edited row is highlighted
+    setStatus('');
+    if (modal) modal.scrollTop = 0;
+  }
+
+  function cancelEdit() {
+    editing = null;
+    resetForm();
+    paintMode();
+    listVideos();
+  }
+
+  /* The modal does double duty, so its wording has to say which it is. */
+  function paintMode() {
+    const heading = $('#video-modal h2');
+    const sub = $('#video-modal .upload-sub');
+    const cancel = $('#video-cancel');
+
+    if (editing) {
+      if (heading) heading.textContent = 'Edit video';
+      if (sub) sub.textContent = 'Change the details, or drop a new file to replace the video.';
+      if (saveBtn) saveBtn.textContent = 'Save changes';
+      if (cancel) cancel.hidden = false;
+    } else {
+      if (heading) heading.textContent = 'Videos';
+      if (sub) {
+        sub.textContent =
+          'Upload a single video. Each one gets its own shareable link and tracks ' +
+          'views, shares, and viewer IPs.';
+      }
+      if (saveBtn) saveBtn.textContent = 'Upload';
+      if (cancel) cancel.hidden = true;
+    }
   }
 
   function resetForm() {
@@ -349,15 +407,20 @@
     return (bytes / 1048576).toFixed(1);
   }
 
-  const saveBtn = $('#video-save');
   if (saveBtn) saveBtn.addEventListener('click', upload);
+
+  const cancelBtn = $('#video-cancel');
+  if (cancelBtn) cancelBtn.addEventListener('click', cancelEdit);
 
   async function upload() {
     if (!db) return setStatus('Supabase isn\'t configured.', true);
 
     const title = ($('#video-title').value || '').trim();
     if (!title) return setStatus('Give the video a title.', true);
-    if (!staged) {
+
+    // A new video needs a file; an edit doesn't — no file just means "keep the
+    // one that's already there".
+    if (!staged && !editing) {
       // Don't replace the size explanation with a vaguer message — the file was
       // chosen, it was just too big.
       return setStatus(
@@ -368,44 +431,72 @@
         true
       );
     }
-
-    saveBtn.disabled = true;
-    setStatus('Uploading…');
-
-    const token = makeToken();
-    const ext = (staged.name.split('.').pop() || 'mp4').toLowerCase();
-    const path = `videos/${token}.${ext}`;
-
-    const { error: upErr } = await db.storage
-      .from(BUCKET)
-      .upload(path, staged, { upsert: true, contentType: staged.type });
-
-    if (upErr) {
-      saveBtn.disabled = false;
-      // Storage's own wording for an oversized file doesn't say what the limit
-      // is or what to do about it, so say both.
-      const tooBig = /exceeded the maximum allowed size|payload too large/i
-        .test(upErr.message || '');
+    if (!staged && rejectedSize) {
       return setStatus(
-        tooBig
-          ? `That video is ${mb(staged.size)} MB, over the ${MAX_UPLOAD_MB} MB limit. ` +
-            'Compress it or trim it down, then try again.'
-          : `Upload failed: ${upErr.message}`,
+        `That video is ${mb(rejectedSize)} MB, over the ${MAX_UPLOAD_MB} MB limit. ` +
+        'Choose a smaller file, or save without replacing the video.',
         true
       );
     }
 
-    const { data: pub } = db.storage.from(BUCKET).getPublicUrl(path);
+    saveBtn.disabled = true;
 
-    const { error: rowErr } = await db.from('video_walkthroughs').insert({
-      token,
+    const fields = {
       title,
       address: ($('#video-address').value || '').trim() || null,
       description: ($('#video-description').value || '').trim() || null,
-      video_url: pub.publicUrl,
-      storage_path: path,
-      creator: await currentEmail(),
-    });
+    };
+
+    let uploaded = null;   // { path, url } when a file was sent this time
+    let newToken = null;   // the share token, for a newly created row
+
+    if (staged) {
+      setStatus('Uploading…');
+
+      // An edit reuses the existing token so the share link a viewer already
+      // has keeps working. Only the extension can change.
+      newToken = editing ? editing.token : makeToken();
+      const ext = (staged.name.split('.').pop() || 'mp4').toLowerCase();
+      const path = `videos/${newToken}.${ext}`;
+
+      const { error: upErr } = await db.storage
+        .from(BUCKET)
+        .upload(path, staged, { upsert: true, contentType: staged.type });
+
+      if (upErr) {
+        saveBtn.disabled = false;
+        // Storage's own wording for an oversized file doesn't say what the limit
+        // is or what to do about it, so say both.
+        const tooBig = /exceeded the maximum allowed size|payload too large/i
+          .test(upErr.message || '');
+        return setStatus(
+          tooBig
+            ? `That video is ${mb(staged.size)} MB, over the ${MAX_UPLOAD_MB} MB limit. ` +
+              'Compress it or trim it down, then try again.'
+            : `Upload failed: ${upErr.message}`,
+          true
+        );
+      }
+
+      const { data: pub } = db.storage.from(BUCKET).getPublicUrl(path);
+
+      // Replacing a clip reuses the storage path, so the public URL wouldn't
+      // change and caches would keep serving the OLD video. A version stamp
+      // makes each replacement a distinct URL.
+      uploaded = { path, url: `${pub.publicUrl}?v=${Date.now()}` };
+      fields.video_url = uploaded.url;
+      fields.storage_path = path;
+    } else {
+      setStatus('Saving…');
+    }
+
+    const { error: rowErr } = editing
+      ? await db.from('video_walkthroughs').update(fields).eq('id', editing.id)
+      : await db.from('video_walkthroughs').insert({
+          ...fields,
+          token: newToken,
+          creator: await currentEmail(),
+        });
 
     saveBtn.disabled = false;
 
@@ -418,8 +509,18 @@
       );
     }
 
-    setStatus('Uploaded.');
+    // A replacement with a different extension writes a different object,
+    // leaving the old file behind — still stored, still billed. Remove it, but
+    // only once the row no longer points at it.
+    if (uploaded && editing && editing.storage_path &&
+        editing.storage_path !== uploaded.path) {
+      await db.storage.from(BUCKET).remove([editing.storage_path]).catch(() => {});
+    }
+
+    setStatus(editing ? 'Saved.' : 'Uploaded.');
+    editing = null;
     resetForm();
+    paintMode();
     listVideos();
     if (mode() === 'videos') renderVideos();
   }
@@ -441,7 +542,7 @@
 
     const { data, error } = await db
       .from('video_walkthroughs')
-      .select('id, token, title, address, storage_path, view_count, share_count')
+      .select('id, token, title, address, description, storage_path, view_count, share_count')
       .order('created_at', { ascending: false });
 
     if (error || !data || !data.length) {
@@ -454,6 +555,8 @@
     data.forEach((v) => {
       const row = document.createElement('div');
       row.className = 'video-row';
+      // Mark the one the form is currently editing, so the two are connected.
+      if (editing && editing.id === v.id) row.classList.add('editing');
 
       const main = document.createElement('div');
       main.className = 'video-row-main';
@@ -464,6 +567,12 @@
 
       const actions = document.createElement('div');
       actions.className = 'video-row-actions';
+
+      const edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'mini-btn';
+      edit.textContent = 'Edit';
+      edit.addEventListener('click', () => startEdit(v));
 
       const stats = document.createElement('button');
       stats.type = 'button';
@@ -477,7 +586,7 @@
       del.textContent = 'Delete';
       del.addEventListener('click', () => removeVideo(v, row));
 
-      actions.append(stats, del);
+      actions.append(edit, stats, del);
       row.append(main, actions);
       list.appendChild(row);
     });
@@ -605,81 +714,140 @@
     return section;
   }
 
+  /* A busy video can log hundreds of views, which would run off the bottom of
+     the panel. Show a page at a time instead. */
+  const ROWS_PER_PAGE = 7;
+
   function viewerTable(rows) {
+    return pagedTable({
+      heading: 'Viewers',
+      empty: 'No views logged yet.',
+      columns: ['IP address', 'Location', 'When', 'Browser'],
+      rows,
+      buildRow(r) {
+        const tr = document.createElement('tr');
+
+        const ip = document.createElement('td');
+        ip.className = 'ip';
+        ip.textContent = r.ip_address || '—';
+
+        const loc = document.createElement('td');
+        loc.textContent = [r.city, r.region, r.country].filter(Boolean).join(', ') || '—';
+
+        const when = document.createElement('td');
+        when.textContent = formatDate(r.viewed_at);
+
+        const agent = document.createElement('td');
+        agent.className = 'agent';
+        agent.title = r.user_agent || '';
+        agent.textContent = shortAgent(r.user_agent);
+
+        tr.append(ip, loc, when, agent);
+        return tr;
+      },
+    });
+  }
+
+  /* One table, ROWS_PER_PAGE at a time, with Prev/Next below it. The controls
+     are left out entirely when everything fits on one page. */
+  function pagedTable({ heading, empty, columns, rows, buildRow }) {
     const section = document.createElement('div');
     section.className = 'stat-section';
     section.style.marginBottom = '26px';
-    section.innerHTML = '<h3>Viewers</h3>';
+
+    const h = document.createElement('h3');
+    h.textContent = heading;
+    section.appendChild(h);
 
     if (!rows.length) {
-      section.appendChild(note('No views logged yet.'));
+      section.appendChild(note(empty));
       return section;
     }
 
-    const scroll = document.createElement('div');
-    scroll.className = 'stat-scroll';
-
     const table = document.createElement('table');
     table.className = 'ip-table';
-    table.innerHTML =
-      '<thead><tr><th>IP address</th><th>Location</th><th>When</th><th>Browser</th></tr></thead>';
+
+    const head = document.createElement('thead');
+    const headRow = document.createElement('tr');
+    columns.forEach((label) => {
+      const th = document.createElement('th');
+      th.textContent = label;
+      headRow.appendChild(th);
+    });
+    head.appendChild(headRow);
+    table.appendChild(head);
 
     const tbody = document.createElement('tbody');
-    rows.forEach((r) => {
-      const tr = document.createElement('tr');
-
-      const ip = document.createElement('td');
-      ip.className = 'ip';
-      ip.textContent = r.ip_address || '—';
-
-      const loc = document.createElement('td');
-      loc.textContent = [r.city, r.region, r.country].filter(Boolean).join(', ') || '—';
-
-      const when = document.createElement('td');
-      when.textContent = formatDate(r.viewed_at);
-
-      const agent = document.createElement('td');
-      agent.className = 'agent';
-      agent.title = r.user_agent || '';
-      agent.textContent = shortAgent(r.user_agent);
-
-      tr.append(ip, loc, when, agent);
-      tbody.appendChild(tr);
-    });
-
     table.appendChild(tbody);
-    scroll.appendChild(table);
-    section.appendChild(scroll);
+    section.appendChild(table);
+
+    const pages = Math.ceil(rows.length / ROWS_PER_PAGE);
+    let page = 0;
+
+    if (pages === 1) {
+      rows.forEach((r) => tbody.appendChild(buildRow(r)));
+      return section;
+    }
+
+    const nav = document.createElement('div');
+    nav.className = 'page-nav';
+
+    const prev = document.createElement('button');
+    prev.type = 'button';
+    prev.className = 'mini-btn';
+    prev.textContent = 'Prev';
+
+    const next = document.createElement('button');
+    next.type = 'button';
+    next.className = 'mini-btn';
+    next.textContent = 'Next';
+
+    const label = document.createElement('span');
+    label.className = 'page-label';
+
+    nav.append(prev, label, next);
+    section.appendChild(nav);
+
+    const draw = () => {
+      const start = page * ROWS_PER_PAGE;
+      const slice = rows.slice(start, start + ROWS_PER_PAGE);
+
+      tbody.replaceChildren(...slice.map(buildRow));
+
+      // Say which records these are, not just which page — "8–14 of 31" tells
+      // you more than "Page 2 of 5".
+      label.textContent =
+        `${start + 1}–${start + slice.length} of ${rows.length}`;
+
+      prev.disabled = page === 0;
+      next.disabled = page >= pages - 1;
+    };
+
+    prev.addEventListener('click', () => { if (page > 0) { page--; draw(); } });
+    next.addEventListener('click', () => { if (page < pages - 1) { page++; draw(); } });
+
+    draw();
     return section;
   }
 
   function shareTable(rows) {
-    const section = document.createElement('div');
-    section.className = 'stat-section';
-    section.innerHTML = '<h3>Shares</h3>';
-
-    if (!rows.length) {
-      section.appendChild(note('No shares logged yet.'));
-      return section;
-    }
-
-    const table = document.createElement('table');
-    table.className = 'ip-table';
-    table.innerHTML = '<thead><tr><th>Channel</th><th>By</th><th>When</th></tr></thead>';
-
-    const tbody = document.createElement('tbody');
-    rows.forEach((r) => {
-      const tr = document.createElement('tr');
-      [r.channel || '—', r.shared_by || 'anonymous', formatDate(r.shared_at)].forEach((text) => {
-        const td = document.createElement('td');
-        td.textContent = text;
-        tr.appendChild(td);
-      });
-      tbody.appendChild(tr);
+    const section = pagedTable({
+      heading: 'Shares',
+      empty: 'No shares logged yet.',
+      columns: ['Channel', 'By', 'When'],
+      rows,
+      buildRow(r) {
+        const tr = document.createElement('tr');
+        [r.channel || '—', r.shared_by || 'anonymous', formatDate(r.shared_at)]
+          .forEach((text) => {
+            const td = document.createElement('td');
+            td.textContent = text;
+            tr.appendChild(td);
+          });
+        return tr;
+      },
     });
-
-    table.appendChild(tbody);
-    section.appendChild(table);
+    section.style.marginBottom = '0';   // last section in the panel
     return section;
   }
 

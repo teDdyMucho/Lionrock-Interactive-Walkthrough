@@ -674,8 +674,19 @@ Each video tracks:
 | **Shares** | one row in `video_walkthrough_shares` per share action |
 | **Viewer list** | IP, location, timestamp, and browser for every view |
 
-Open **Upload/Edit** while the Videos tab is selected to add one, and use the
-**Analytics** button beside each uploaded video to see its numbers.
+Open **Upload/Edit** while the Videos tab is selected to add one. Each uploaded
+video then has three buttons:
+
+- **Edit** — loads it back into the form. The file becomes optional there:
+  leave it empty to change only the title, address or description. Dropping a
+  new file replaces the video while **keeping the same share link**, so a link
+  already sent to someone keeps working and its view history is preserved. If
+  the new file has a different extension the old object is deleted, and the URL
+  is stamped with `?v=<timestamp>` so caches don't keep serving the old video.
+- **Analytics** — the numbers and the viewer log. Both tables page 7 rows at a
+  time, with Prev/Next and an "8–14 of 31" counter; the controls are hidden
+  when everything fits on one page.
+- **Delete** — removes the video, its file, and all of its analytics.
 
 **Why views go through `/api/video-view`.** A browser cannot see its own public
 IP address, and an IP supplied by the page would be trivially forgeable — anyone
