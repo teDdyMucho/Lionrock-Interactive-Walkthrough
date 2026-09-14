@@ -28,10 +28,18 @@ function walkthroughHref(slug) {
   return `${base}?property=${encodeURIComponent(slug)}`;
 }
 
+/* Guards against two renders overlapping — switching tabs quickly starts a
+   second one while the first is still waiting on its query, and both would
+   otherwise append to the same grid, showing every card twice. */
+let galleryToken = 0;
+
 async function renderGallery() {
   const grid = document.getElementById('grid');
   const status = document.getElementById('gallery-status');
   if (!grid) return;
+
+  const mine = ++galleryToken;
+  const superseded = () => mine !== galleryToken;
 
   // The Videos tab is a different table entirely (video_walkthroughs), so
   // videos.js renders it. Hand over rather than querying properties.
@@ -42,9 +50,11 @@ async function renderGallery() {
     return;
   }
 
-  grid.innerHTML = '';   // switching tabs replaces the whole list
-
-  const setStatus = (msg) => { if (status) status.textContent = msg || ''; };
+  // Cleared where the cards are replaced, not here — clearing up front would
+  // let a second render wipe what the first one just placed.
+  const setStatus = (msg) => {
+    if (status && !superseded()) status.textContent = msg || '';
+  };
 
   const cfg = window.SUPABASE_CONFIG || {};
   const ready =
@@ -53,6 +63,7 @@ async function renderGallery() {
     !cfg.anonKey.includes('YOUR-ANON');
 
   if (!ready) {
+    grid.innerHTML = '';
     // Distinguish the two failure modes: locally you forgot to generate the
     // config; on a host it means the build didn't run / env vars are missing.
     const local = ['localhost', '127.0.0.1', ''].includes(location.hostname);
@@ -80,6 +91,8 @@ async function renderGallery() {
 
   let { data, error } = await query;
 
+  if (superseded()) return;
+
   // Before migration 006 there's no `mode` column; fall back to showing
   // everything rather than an empty gallery.
   if (error) {
@@ -88,6 +101,7 @@ async function renderGallery() {
       .select('slug, title, address, property_videos(video_url, sort_order)')
       .order('created_at');
     if (all.error) {
+      grid.innerHTML = '';
       setStatus(`Couldn't load properties: ${all.error.message}`);
       return;
     }
@@ -105,6 +119,7 @@ async function renderGallery() {
     .filter((p) => p.clips.length);
 
   if (!playable.length) {
+    grid.innerHTML = '';
     // Name the tab — an empty Video gallery next to a full Interactive one
     // otherwise looks like the properties vanished.
     const tab = currentMode() === 'video' ? 'Video Walkthrough' : 'Interactive Walkthrough';
@@ -116,7 +131,7 @@ async function renderGallery() {
 
   const frag = document.createDocumentFragment();
   playable.forEach((p) => frag.appendChild(buildCard(p, p.clips[0].video_url)));
-  grid.appendChild(frag);
+  grid.replaceChildren(frag);   // replace, never append onto what's there
 
   wireLazyPreviews(grid);
 

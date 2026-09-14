@@ -27,6 +27,12 @@
   let rejectedSize = 0;     // size of the last file turned away for being too big
   let signedIn = false;
 
+  /* Renders can overlap: gallery.js calls one on load, and the auth check calls
+     another as soon as the session resolves. Both clear the grid and then wait
+     on a query, so without this the two results would each append and every
+     card would appear twice. Only the newest render may touch the grid. */
+  let renderToken = 0;
+
   /* Largest file Storage will accept. Checked here as well as server-side so an
      oversized file is rejected instantly, rather than after uploading for a few
      minutes only to be turned away.
@@ -57,10 +63,17 @@
     const status = $('#gallery-status');
     if (!grid) return;
 
-    grid.innerHTML = '';
-    const setStatus = (m) => { if (status) status.textContent = m || ''; };
+    const mine = ++renderToken;
+    // A newer render started while this one was waiting on the query — it owns
+    // the grid now, so this one must not write anything.
+    const superseded = () => mine !== renderToken;
+
+    // The grid is cleared where it's replaced, not here: clearing up front
+    // would let a second render wipe the cards the first one just placed.
+    const setStatus = (m) => { if (status && !superseded()) status.textContent = m || ''; };
 
     if (!db) {
+      grid.innerHTML = '';
       setStatus('Supabase isn\'t configured on this deployment.');
       return;
     }
@@ -72,7 +85,10 @@
       .select('id, token, title, address, description, video_url, view_count, share_count')
       .order('created_at', { ascending: false });
 
+    if (superseded()) return;
+
     if (error) {
+      grid.innerHTML = '';
       setStatus(
         /video_walkthroughs/.test(error.message)
           ? 'Run supabase/migrations/008-video-analytics.sql in the Supabase SQL editor first.'
@@ -82,6 +98,7 @@
     }
 
     if (!data || !data.length) {
+      grid.innerHTML = '';
       setStatus('No videos yet — use Upload/Edit to add one.');
       return;
     }
@@ -90,7 +107,7 @@
 
     const frag = document.createDocumentFragment();
     data.forEach((v) => frag.appendChild(buildCard(v)));
-    grid.appendChild(frag);
+    grid.replaceChildren(frag);   // replace, never append onto what's there
 
     lazyPreviews(grid);
   }
@@ -746,14 +763,19 @@
 
   if (window.AdminAuth) {
     const apply = (user) => {
+      const was = signedIn;
       signedIn = !!user;
+
       if (!user) {
         closeModal();
         const stats = $('#stats-modal');
         if (stats) stats.classList.remove('open');
       }
-      // Card subtitles differ for admins, so re-render on a session change.
-      if (mode() === 'videos') renderVideos();
+
+      // Card subtitles differ for admins, so a session change needs a re-render
+      // — but only when it actually changed. Re-rendering on every auth event
+      // races the render gallery.js already started on load.
+      if (was !== signedIn && mode() === 'videos') renderVideos();
     };
     window.AdminAuth.getUser().then(apply);
     window.AdminAuth.onChange(apply);
