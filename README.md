@@ -657,6 +657,39 @@ The `reverse_url` / `reverse_path` columns from migration 005 are left in place
 but no longer read or written — dropping columns is destructive, and any
 reversed files already uploaded are simply ignored.
 
+
+### The Videos tab (with analytics)
+
+A third tab, **Videos**, is not a walkthrough at all: one upload is one video,
+one card, one shareable link. It has its own table (`video_walkthroughs`,
+migration 008) rather than reusing `properties`, because there is no room
+sequence to model.
+
+Each video tracks:
+
+| Metric | Where it comes from |
+| --- | --- |
+| **Total views** | one row in `video_walkthrough_views` per page load of the share link |
+| **Unique IPs** | distinct `ip_address` values in that log |
+| **Shares** | one row in `video_walkthrough_shares` per share action |
+| **Viewer list** | IP, location, timestamp, and browser for every view |
+
+Open **Upload/Edit** while the Videos tab is selected to add one, and use the
+**Analytics** button beside each uploaded video to see its numbers.
+
+**Why views go through `/api/video-view`.** A browser cannot see its own public
+IP address, and an IP supplied by the page would be trivially forgeable — anyone
+could fake a viewer list. So the viewer page posts only the share token, and the
+serverless function reads the real address off the request headers
+(`x-forwarded-for`). On Vercel it also picks up the city/region/country headers;
+elsewhere those columns stay null, which the table renders as `—`.
+
+The share token is 12 random URL-safe characters, so links can't be found by
+guessing sequential ids.
+
+Deleting a video removes its file from storage first, then the row — the
+analytics rows go with it via `on delete cascade`.
+
 ### First-visit guides
 
 **Both tabs** show a four-step overlay on a viewer's first visit, sharing one

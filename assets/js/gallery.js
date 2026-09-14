@@ -16,7 +16,8 @@ const MODE_KEY = 'lionrock-walkthrough-mode';
 
 function currentMode() {
   try {
-    return localStorage.getItem(MODE_KEY) === 'video' ? 'video' : 'interactive';
+    const saved = localStorage.getItem(MODE_KEY);
+    return ['video', 'videos'].includes(saved) ? saved : 'interactive';
   } catch {
     return 'interactive';
   }
@@ -31,6 +32,15 @@ async function renderGallery() {
   const grid = document.getElementById('grid');
   const status = document.getElementById('gallery-status');
   if (!grid) return;
+
+  // The Videos tab is a different table entirely (video_walkthroughs), so
+  // videos.js renders it. Hand over rather than querying properties.
+  if (currentMode() === 'videos') {
+    if (window.VideoTab) return window.VideoTab.render();
+    grid.innerHTML = '';
+    if (status) status.textContent = 'Videos tab script did not load.';
+    return;
+  }
 
   grid.innerHTML = '';   // switching tabs replaces the whole list
 
