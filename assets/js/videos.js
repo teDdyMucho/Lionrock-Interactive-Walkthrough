@@ -24,7 +24,6 @@
   const BUCKET = cfg.bucket || 'walkthrough-videos';
 
   let staged = null;        // the File waiting to be uploaded
-  let rejectedSize = 0;     // size of the last file turned away for being too big
   let editing = null;       // the video being edited, or null when adding a new one
   let signedIn = false;
 
@@ -33,17 +32,6 @@
      on a query, so without this the two results would each append and every
      card would appear twice. Only the newest render may touch the grid. */
   let renderToken = 0;
-
-  /* Largest file Storage will accept. Checked here as well as server-side so an
-     oversized file is rejected instantly, rather than after uploading for a few
-     minutes only to be turned away.
-
-     This has to match the bucket's file_size_limit. Note that a Supabase
-     project also has a global per-file cap that overrides the bucket setting
-     (50MB on the free plan), so raising this alone isn't enough — raise the
-     project limit under Settings → Storage first. */
-  const MAX_UPLOAD_MB = Number(cfg.maxUploadMb) || 50;
-  const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 
   /* ---------- gallery ---------- */
 
@@ -278,7 +266,6 @@
   function startEdit(video) {
     editing = video;
     staged = null;
-    rejectedSize = 0;
 
     $('#video-title').value = video.title || '';
     $('#video-address').value = video.address || '';
@@ -288,7 +275,7 @@
       drop.classList.remove('staged', 'done', 'error', 'dragging');
       drop.querySelector('.area-hint').textContent = 'Drop a new video to replace it';
       const limit = drop.querySelector('.drop-limit');
-      if (limit) limit.textContent = `Optional · up to ${MAX_UPLOAD_MB} MB`;
+      if (limit) limit.textContent = 'Optional — leave empty to keep the current video';
     }
 
     paintMode();
@@ -329,7 +316,6 @@
 
   function resetForm() {
     staged = null;
-    rejectedSize = 0;
     ['#video-title', '#video-address', '#video-description'].forEach((s) => {
       const el = $(s);
       if (el) el.value = '';
@@ -338,7 +324,7 @@
       drop.classList.remove('staged', 'done', 'error', 'dragging');
       drop.querySelector('.area-hint').textContent = 'Drop a video here, or click to choose';
       const limit = drop.querySelector('.drop-limit');
-      if (limit) limit.textContent = `MP4, MOV or WebM · up to ${MAX_UPLOAD_MB} MB`;
+      if (limit) limit.textContent = 'MP4, MOV or WebM';
     }
     setStatus('');
   }
@@ -353,7 +339,7 @@
   if (drop) {
     // Paint the limit immediately, not just when the modal is next reset.
     const limitEl = drop.querySelector('.drop-limit');
-    if (limitEl) limitEl.textContent = `MP4, MOV or WebM · up to ${MAX_UPLOAD_MB} MB`;
+    if (limitEl) limitEl.textContent = 'MP4, MOV or WebM';
 
     drop.addEventListener('click', () => fileInput && fileInput.click());
     if (fileInput) {
@@ -375,28 +361,11 @@
 
   function stageFile(file) {
     if (!file.type.startsWith('video/')) {
-      rejectedSize = 0;   // this one was refused for its type, not its size
       setStatus('That file isn\'t a video.', true);
       return;
     }
 
-    if (file.size > MAX_UPLOAD_BYTES) {
-      staged = null;
-      rejectedSize = file.size;
-      drop.classList.remove('staged', 'done');
-      drop.classList.add('error');
-      drop.querySelector('.area-hint').textContent =
-        `${file.name} · ${mb(file.size)} MB — too large`;
-      setStatus(
-        `That video is ${mb(file.size)} MB. The limit is ${MAX_UPLOAD_MB} MB — ` +
-        'compress it or trim it down, then try again.',
-        true
-      );
-      return;
-    }
-
     staged = file;
-    rejectedSize = 0;
     drop.classList.remove('error', 'done');
     drop.classList.add('staged');
     drop.querySelector('.area-hint').textContent = `${file.name} · ${mb(file.size)} MB`;
@@ -421,22 +390,7 @@
     // A new video needs a file; an edit doesn't — no file just means "keep the
     // one that's already there".
     if (!staged && !editing) {
-      // Don't replace the size explanation with a vaguer message — the file was
-      // chosen, it was just too big.
-      return setStatus(
-        rejectedSize
-          ? `That video is ${mb(rejectedSize)} MB, over the ${MAX_UPLOAD_MB} MB limit. ` +
-            'Choose a smaller file.'
-          : 'Choose a video file first.',
-        true
-      );
-    }
-    if (!staged && rejectedSize) {
-      return setStatus(
-        `That video is ${mb(rejectedSize)} MB, over the ${MAX_UPLOAD_MB} MB limit. ` +
-        'Choose a smaller file, or save without replacing the video.',
-        true
-      );
+      return setStatus('Choose a video file first.', true);
     }
 
     saveBtn.disabled = true;
@@ -465,14 +419,16 @@
 
       if (upErr) {
         saveBtn.disabled = false;
-        // Storage's own wording for an oversized file doesn't say what the limit
-        // is or what to do about it, so say both.
+        // There's no size check here any more, so Storage is the one that says
+        // no. Its wording doesn't mention the file or what to do, so say both —
+        // the limit itself comes from the Supabase project, not from this code.
         const tooBig = /exceeded the maximum allowed size|payload too large/i
           .test(upErr.message || '');
         return setStatus(
           tooBig
-            ? `That video is ${mb(staged.size)} MB, over the ${MAX_UPLOAD_MB} MB limit. ` +
-              'Compress it or trim it down, then try again.'
+            ? `Storage rejected this ${mb(staged.size)} MB video as too large. ` +
+              'Compress it or trim it down, or raise the limit in Supabase under ' +
+              'Settings → Storage.'
             : `Upload failed: ${upErr.message}`,
           true
         );
