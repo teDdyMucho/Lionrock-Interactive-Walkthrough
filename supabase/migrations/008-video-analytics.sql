@@ -82,9 +82,14 @@ drop policy if exists "vws read" on public.video_walkthrough_shares;
 create policy "vws read" on public.video_walkthrough_shares for select to anon, authenticated using (true);
 
 -- 6) Storage bucket for the video files -----------------------------------
-insert into storage.buckets (id, name, public)
-values ('walkthrough-videos', 'walkthrough-videos', true)
-on conflict (id) do update set public = true;
+-- file_size_limit is carried here so re-running this doesn't quietly reset the
+-- bucket's ceiling to the project default (see migration 009).
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('walkthrough-videos', 'walkthrough-videos', true, 524288000)
+on conflict (id) do update
+  set public = true,
+      file_size_limit = greatest(
+        coalesce(storage.buckets.file_size_limit, 0), excluded.file_size_limit);
 
 drop policy if exists "walkthrough-videos upload" on storage.objects;
 create policy "walkthrough-videos upload" on storage.objects
