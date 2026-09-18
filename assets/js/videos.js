@@ -426,9 +426,9 @@
           .test(upErr.message || '');
         return setStatus(
           tooBig
-            ? `Storage rejected this ${mb(staged.size)} MB video as too large. ` +
-              'Compress it or trim it down, or raise the limit in Supabase under ' +
-              'Settings → Storage.'
+            ? `Storage rejected this ${mb(staged.size)} MB video — the limit is ` +
+              '50 MB. Compress it or trim it down. (Raising the limit needs a ' +
+              'paid Supabase plan; it is a project-wide cap, not a setting here.)'
             : `Upload failed: ${upErr.message}`,
           true
         );

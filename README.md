@@ -700,9 +700,13 @@ Supabase Storage decides whether to accept it. If it refuses one, the modal says
 so and names the file's size.
 
 The limit that applies is Supabase's own: a **project-wide per-file cap that
-overrides the bucket's `file_size_limit`** (50 MB on the free plan, so the
-500 MB the schema asks for is not what's in force). Raise it under
-**Settings → Storage** in the Supabase dashboard.
+overrides the bucket's `file_size_limit`**. Measured on this project
+(2026-09-19), both anonymously and signed in: **50 MB is accepted, 55 MB comes
+back 413**. The 500 MB the schema asks for is not what's in force, and setting
+the bucket's limit with SQL does not change it (see migration 009).
+
+Raising it means raising the project cap under **Settings → Storage** in the
+dashboard, which above 50 MB requires a paid plan.
 
 The trade-off of checking nothing up front: an oversized file uploads for as
 long as it takes before being rejected, rather than being turned away
